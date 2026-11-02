@@ -6,8 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import React, { Suspense } from "react";
 import Home from "@/pages/home";
 const Game = React.lazy(() => import("@/pages/game"));
-const Account = React.lazy(() => import("@/pages/account"));
-const Leaderboard = React.lazy(() => import("@/pages/leaderboard"));
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -16,9 +14,6 @@ function Router() {
       <Switch>
         <Route path="/" component={Home}/>
         <Route path="/game" component={Game}/>
-        <Route path="/account" component={Account}/>
-        <Route path="/leaderboard" component={Leaderboard}/>
-        {/* Fallback to 404 */}
         <Route component={NotFound} />
       </Switch>
     </Suspense>

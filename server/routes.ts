@@ -24,27 +24,15 @@ import {
   togglePlayerReady,
 } from "@shared/game-engine";
 import { joinOrReconnectPlayer } from "./room-join";
-import { registerAuthRoutes } from "./auth-routes";
-import { registerLeaderboardRoutes } from "./leaderboard-routes";
-import { getUserForSessionToken, SESSION_COOKIE_NAME } from "./auth";
-import { parseCookieHeader } from "./cookies";
-import { persistSettlement } from "./stats";
 
 interface ExtendedWebSocket extends WebSocket {
   playerId?: string;
   roomCode?: string;
   playerName?: string;
-  sessionToken?: string;
   lastPing?: number;
   disconnectTimer?: NodeJS.Timeout;
   messageCount?: number;
   messageWindowStart?: number;
-}
-
-async function resolveUserId(sessionToken: string | undefined): Promise<string | undefined> {
-  if (!sessionToken) return undefined;
-  const user = await getUserForSessionToken(sessionToken);
-  return user?.id;
 }
 
 interface SocketMessage {
@@ -67,7 +55,6 @@ function redactGameStateForPlayer(state: GameState, playerId: string): GameState
     };
   }
 
-  // During pot_or_fold and side_game, redact deck and other players' private cards
   const potPlayersCount = state.players.filter((p) => p.decision === "pot").length;
 
   return {
@@ -77,7 +64,6 @@ function redactGameStateForPlayer(state: GameState, playerId: string): GameState
       if (player.id === playerId) {
         return player;
       }
-      // In side_game phase, if 2+ players potted, potting players are in showdown so their hole cards can be shown
       const revealPotShowdown =
         state.phase === "side_game" && potPlayersCount >= 2 && player.decision === "pot";
 
@@ -96,9 +82,6 @@ function redactGameStateForPlayer(state: GameState, playerId: string): GameState
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  registerAuthRoutes(app);
-  registerLeaderboardRoutes(app);
-
   const httpServer = createServer(app);
   const wss = new WebSocketServer({ noServer: true });
   const roomConnections = new Map<string, Set<ExtendedWebSocket>>();
@@ -238,10 +221,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
-  wss.on("connection", (socket: ExtendedWebSocket, request) => {
+  wss.on("connection", (socket: ExtendedWebSocket) => {
     updateActiveSocketMetric();
-
-    socket.sessionToken = parseCookieHeader(request.headers.cookie)[SESSION_COOKIE_NAME];
     socket.lastPing = Date.now();
 
     socket.on("pong", () => {
@@ -279,12 +260,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const roomCode = generateRoomCode();
             const playerId = `player_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
-            const userId = await resolveUserId(socket.sessionToken);
             const gameState = createGame(
               roomCode,
               parsed.playerName,
               playerId,
-              userId,
+              undefined,
               parsed.ante ?? 10,
             );
             await storage.createRoom(gameState);
@@ -313,14 +293,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const newPlayerId = `player_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
             try {
-              const userId = await resolveUserId(socket.sessionToken);
               let playerId = newPlayerId;
               const updatedState = await storage.mutateRoom(parsed.roomCode, async (gameState) => {
                 const result = joinOrReconnectPlayer(
                   gameState,
                   parsed.playerName,
                   newPlayerId,
-                  userId,
                 );
                 playerId = result.playerId;
                 return result.state;
@@ -469,12 +447,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 type: "state:update",
                 data: updatedState,
               });
-
-              if (updatedState.phase === "settlement") {
-                persistSettlement(updatedState).catch((error) => {
-                  console.error("Failed to persist settlement:", error);
-                });
-              }
             } catch (error) {
               sendError(socket, "START_FAILED", (error as Error).message);
             }
@@ -513,12 +485,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   type: "info",
                 },
               });
-
-              if (updatedState.phase === "settlement") {
-                persistSettlement(updatedState).catch((error) => {
-                  console.error("Failed to persist settlement:", error);
-                });
-              }
             } catch (error) {
               sendError(socket, "DECISION_FAILED", (error as Error).message);
             }
@@ -551,12 +517,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 type: "state:update",
                 data: updatedState,
               });
-
-              if (updatedState.phase === "settlement") {
-                persistSettlement(updatedState).catch((error) => {
-                  console.error("Failed to persist settlement:", error);
-                });
-              }
             } catch (error) {
               sendError(socket, "SIDE_SUBMIT_FAILED", (error as Error).message);
             }
@@ -583,12 +543,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 type: "state:update",
                 data: updatedState,
               });
-
-              if (updatedState.phase === "settlement") {
-                persistSettlement(updatedState).catch((error) => {
-                  console.error("Failed to persist settlement:", error);
-                });
-              }
             } catch (error) {
               sendError(socket, "NEW_ROUND_FAILED", (error as Error).message);
             }
@@ -685,14 +639,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const roomCode = generateRoomCode();
       const playerId = `player_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
-      const userId = await resolveUserId(
-        parseCookieHeader(req.headers.cookie)[SESSION_COOKIE_NAME],
-      );
       const gameState = createGame(
         roomCode,
         parsed.playerName,
         playerId,
-        userId,
+        undefined,
         parsed.ante ?? 10,
       );
       await storage.createRoom(gameState);
@@ -718,16 +669,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const parsed = JoinRoomSchema.parse(req.body);
       const newPlayerId = `player_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
-      const userId = await resolveUserId(
-        parseCookieHeader(req.headers.cookie)[SESSION_COOKIE_NAME],
-      );
       let playerId = newPlayerId;
       const updatedState = await storage.mutateRoom(roomCode, async (gameState) => {
         const result = joinOrReconnectPlayer(
           gameState,
           parsed.playerName,
           newPlayerId,
-          userId,
         );
         playerId = result.playerId;
         return result.state;

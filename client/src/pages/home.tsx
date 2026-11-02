@@ -9,17 +9,13 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { BrandMark } from '@/components/brand-mark';
 import { useGameSocket } from '@/hooks/use-game-socket';
-import { useAuth } from '@/hooks/use-auth';
 import {
   RotateCcw,
   Sparkles,
   PlusCircle,
   UserPlus,
-  CheckCircle2,
   Layers,
   BookOpen,
-  CircleUserRound,
-  Trophy,
   Coins,
   Crown,
 } from 'lucide-react';
@@ -39,7 +35,6 @@ export default function Home() {
   const [selectedAnte, setSelectedAnte] = useState(10);
   const [joinRoomCode, setJoinRoomCode] = useState('');
   const { createRoom, joinRoom, roomCode, clearRoom } = useGameSocket();
-  const { user } = useAuth();
 
   useEffect(() => {
     if (!roomCode) {
@@ -47,13 +42,6 @@ export default function Home() {
       localStorage.removeItem('furious-five-player-id');
     }
   }, [roomCode]);
-
-  useEffect(() => {
-    if (user && !playerName) {
-      setPlayerName(user.username);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
 
   const handleReset = () => {
     clearRoom();
@@ -176,32 +164,12 @@ export default function Home() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setLocation('/leaderboard')}
-              data-testid="button-leaderboard"
-              className="flex items-center gap-2 bg-white/5 border-white/15 text-white hover:bg-white/10 hover:text-white rounded-xl"
-            >
-              <Trophy className="h-4 w-4 text-amber-400" />
-              Leaderboard
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setLocation('/account')}
-              data-testid="button-account"
-              className="flex items-center gap-2 bg-white/5 border-white/15 text-white hover:bg-white/10 hover:text-white rounded-xl"
-            >
-              <CircleUserRound className="h-4 w-4 text-emerald-400" />
-              {user ? user.username : 'Sign in'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
               onClick={handleReset}
               data-testid="button-reset-app"
               className="flex items-center gap-2 bg-white/5 border-white/15 text-white hover:bg-white/10 hover:text-white rounded-xl"
             >
               <RotateCcw className="h-4 w-4" />
-              Reset
+              Reset Session
             </Button>
           </div>
         </header>

@@ -11,7 +11,6 @@ export function joinOrReconnectPlayer(
   gameState: GameState,
   playerName: string,
   newPlayerId: string,
-  userId?: string,
 ): JoinResult {
   if (gameState.phase !== "lobby") {
     throw new Error("Game already in progress");
@@ -40,7 +39,7 @@ export function joinOrReconnectPlayer(
   }
 
   return {
-    state: joinGame(gameState, playerName, newPlayerId, userId),
+    state: joinGame(gameState, playerName, newPlayerId),
     playerId: newPlayerId,
     rejoined: false,
   };
