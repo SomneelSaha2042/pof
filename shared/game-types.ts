@@ -148,12 +148,12 @@ export const SideHandArrangementSchema = z.object({
 });
 
 export const JoinRoomSchema = z.object({
-  roomCode: z.string(),
-  playerName: z.string(),
+  roomCode: z.string().trim().min(3).max(20),
+  playerName: z.string().trim().min(1).max(24),
 });
 
 export const CreateRoomSchema = z.object({
-  playerName: z.string(),
+  playerName: z.string().trim().min(1).max(24),
   ante: z.number().int().min(1).max(10000).optional(),
 });
 

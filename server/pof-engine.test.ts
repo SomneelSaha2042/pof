@@ -13,6 +13,7 @@ import {
   applyFlopDecision,
   submitSideHand,
 } from "@shared/game-engine";
+import { redactGameStateForPlayer } from "./routes";
 
 const c = (r: Card["r"], s: Card["s"] = "S"): Card => ({ r, s });
 
@@ -190,3 +191,54 @@ test("Full POF hand flow: ante, flop pot/fold decisions, side game, settlement, 
   assert.equal(state.buttonIdx, 1);
   assert.equal(state.turnIdx, 1);
 });
+
+test("Security & state redaction: opponent cards, deck, mucked hands, and secret player IDs never leak", () => {
+  let state = createGame("POF-SEC01", "Alice", "secret_alice_id", undefined, 10);
+  state = joinGame(state, "Bob", "secret_bob_id");
+  state = joinGame(state, "Charlie", "secret_charlie_id");
+
+  state = togglePlayerReady(state, "secret_alice_id");
+  state = togglePlayerReady(state, "secret_bob_id");
+  state = togglePlayerReady(state, "secret_charlie_id");
+  state = startRound(state);
+
+  // 1. During pot_or_fold, Alice sees only her own cards and her own secret ID
+  const aliceViewFlop = redactGameStateForPlayer(state, "secret_alice_id");
+  assert.equal(aliceViewFlop.players[0].id, "secret_alice_id");
+  assert.equal(aliceViewFlop.players[1].id, "seat_1"); // Bob's secret ID is hidden!
+  assert.equal(aliceViewFlop.players[2].id, "seat_2"); // Charlie's secret ID is hidden!
+  assert.ok(aliceViewFlop.players[0].hand.every((card) => card !== null));
+  assert.ok(aliceViewFlop.players[1].hand.every((card) => card === null));
+  assert.ok(aliceViewFlop.players[2].hand.every((card) => card === null));
+  assert.ok(aliceViewFlop.deck.every((card) => card === null));
+
+  // 2. Alice pots (1 player pots), Bob and Charlie fold (2 players fold -> side_game)
+  state = applyFlopDecision(state, "secret_alice_id", "pot");
+  state = applyFlopDecision(state, "secret_bob_id", "fold");
+  state = applyFlopDecision(state, "secret_charlie_id", "fold");
+  assert.equal(state.phase, "side_game");
+
+  // During side_game, Bob cannot see Charlie's hole cards or side arrangement
+  const bobViewSide = redactGameStateForPlayer(state, "secret_bob_id");
+  assert.ok(bobViewSide.players[1].hand.every((card) => card !== null));
+  assert.ok(bobViewSide.players[2].hand.every((card) => card === null));
+  assert.equal(bobViewSide.players[2].sideArrangement, null);
+  assert.equal(bobViewSide.players[2].sideEvaluation, null);
+  // And since Alice won the main pot uncontested (only 1 potter), her cards stay mucked to Bob!
+  assert.ok(bobViewSide.players[0].hand.every((card) => card === null));
+
+  // 3. After Bob and Charlie submit their side hands -> settlement
+  state = submitSideHand(state, "secret_bob_id");
+  state = submitSideHand(state, "secret_charlie_id");
+  assert.equal(state.phase, "settlement");
+
+  const bobViewSettlement = redactGameStateForPlayer(state, "secret_bob_id");
+  // Bob and Charlie went to Side Game showdown, so they see each other's side game hands
+  assert.ok(bobViewSettlement.players[2].hand.every((card) => card !== null));
+  assert.ok(bobViewSettlement.players[2].sideEvaluation !== null);
+  // Alice won the main pot uncontested (no showdown), so Alice's hole cards STILL stay mucked to Bob!
+  assert.ok(bobViewSettlement.players[0].hand.every((card) => card === null));
+  // Settlement keys use anonymized seat IDs for opponents
+  assert.deepEqual(bobViewSettlement.settlement?.mainPotResult.winnerIds, ["seat_0"]);
+});
+

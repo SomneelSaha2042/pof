@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { metrics } from "./metrics";
 import { storage } from "./storage";
-import type { GameState } from "@shared/game-types";
+import type { GameState, Settlement } from "@shared/game-types";
 import {
   JoinRoomSchema,
   CreateRoomSchema,
@@ -47,37 +47,118 @@ function errorCodeForJoin(error: Error): string {
   return "JOIN_FAILED";
 }
 
-function redactGameStateForPlayer(state: GameState, playerId: string): GameState {
-  if (state.phase === "lobby" || state.phase === "settlement") {
-    return {
-      ...state,
-      deck: Array(state.deck.length).fill(null),
-    };
-  }
+/**
+ * Redacts sensitive game state for a specific viewer (`viewerPlayerId`):
+ * 1. Never exposes undealt `deck` cards.
+ * 2. Anonymizes other human players' secret `player.id` tokens (`seat_0`, `seat_1`, ...)
+ *    so no client can impersonate another player via HTTP or WebSocket.
+ * 3. Hides opponent hole cards and side-game arrangements during active play,
+ *    and keeps mucked/uncontested hands hidden even at settlement.
+ */
+export function redactGameStateForPlayer(
+  state: GameState,
+  viewerPlayerId: string,
+): GameState {
+  const idMap = new Map<string, string>();
+  state.players.forEach((p, idx) => {
+    if (p.id === viewerPlayerId || p.isBot) {
+      idMap.set(p.id, p.id);
+    } else {
+      idMap.set(p.id, `seat_${idx}`);
+    }
+  });
+
+  const mapId = (id: string): string => idMap.get(id) ?? id;
 
   const potPlayersCount = state.players.filter((p) => p.decision === "pot").length;
+  const foldPlayersCount = state.players.filter((p) => p.decision === "fold").length;
+
+  const redactedPlayers = state.players.map((player) => {
+    const publicId = mapId(player.id);
+
+    // Viewer always sees their own cards
+    if (player.id === viewerPlayerId) {
+      return {
+        ...player,
+        id: publicId,
+      };
+    }
+
+    // Determine if this opponent's cards should be revealed at showdown:
+    // - Main pot showdown: 2+ players potted and flop betting is over
+    const showMainShowdown =
+      (state.phase === "side_game" || state.phase === "settlement") &&
+      potPlayersCount >= 2 &&
+      player.decision === "pot";
+
+    // - Side game showdown: 2+ players folded and game has reached settlement
+    const showSideShowdown =
+      state.phase === "settlement" &&
+      foldPlayersCount >= 2 &&
+      player.decision === "fold";
+
+    if (showMainShowdown) {
+      return {
+        ...player,
+        id: publicId,
+        sideArrangement: null,
+        sideEvaluation: null,
+      };
+    }
+
+    if (showSideShowdown) {
+      return {
+        ...player,
+        id: publicId,
+      };
+    }
+
+    // Otherwise redact hole cards and side game state completely
+    return {
+      ...player,
+      id: publicId,
+      hand: Array(player.hand.length).fill(null),
+      sideArrangement: null,
+      sideEvaluation: null,
+    };
+  });
+
+  let redactedSettlement: Settlement | null | undefined = state.settlement;
+  if (state.settlement) {
+    const mapRecordKeys = <T>(rec: Record<string, T>): Record<string, T> => {
+      const out: Record<string, T> = {};
+      for (const [k, v] of Object.entries(rec)) {
+        out[mapId(k)] = v;
+      }
+      return out;
+    };
+
+    redactedSettlement = {
+      ...state.settlement,
+      mainPotResult: {
+        ...state.settlement.mainPotResult,
+        winnerIds: state.settlement.mainPotResult.winnerIds.map(mapId),
+        playerEvaluations: mapRecordKeys(
+          state.settlement.mainPotResult.playerEvaluations,
+        ),
+      },
+      sideMatchups: state.settlement.sideMatchups.map((m) => ({
+        ...m,
+        playerAId: mapId(m.playerAId),
+        playerBId: mapId(m.playerBId),
+        winnerId: m.winnerId ? mapId(m.winnerId) : null,
+      })),
+      mainPotDeltas: mapRecordKeys(state.settlement.mainPotDeltas),
+      sideGameDeltas: mapRecordKeys(state.settlement.sideGameDeltas),
+      totalRoundDeltas: mapRecordKeys(state.settlement.totalRoundDeltas),
+    };
+  }
 
   return {
     ...state,
     deck: Array(state.deck.length).fill(null),
-    players: state.players.map((player) => {
-      if (player.id === playerId) {
-        return player;
-      }
-      const revealPotShowdown =
-        state.phase === "side_game" && potPlayersCount >= 2 && player.decision === "pot";
-
-      if (revealPotShowdown) {
-        return player;
-      }
-
-      return {
-        ...player,
-        hand: Array(player.hand.length).fill(null),
-        sideArrangement: null,
-        sideEvaluation: null,
-      };
-    }),
+    players: redactedPlayers,
+    settlement: redactedSettlement,
   };
 }
 
@@ -552,8 +633,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           case "game:getState": {
             const parsed = GameGetStateSchema.parse(message.data || {});
-            const roomCode = parsed.roomCode || socket.roomCode;
-            const playerId = parsed.playerId || socket.playerId;
+            const roomCode = socket.roomCode || parsed.roomCode;
+            // Prevent a bound socket from spoofing another player's ID
+            const playerId = socket.playerId || parsed.playerId;
 
             if (!roomCode) {
               sendError(socket, "NOT_IN_ROOM", "Not in a room");
@@ -567,7 +649,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
 
             if (playerId && !socket.playerId) {
-              const player = gameState.players.find((p) => p.id === playerId);
+              // Only allow binding to an actual secret player.id (never a public 'seat_X' alias)
+              const player = gameState.players.find(
+                (p) => p.id === playerId && !p.isBot,
+              );
               if (player) {
                 socket.playerId = playerId;
                 socket.roomCode = roomCode;

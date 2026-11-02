@@ -196,24 +196,34 @@ export function SettlementView({
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {validCards.map((c, cIdx) => {
-                          const usedInOmaha = omahaEval?.holeCardsUsed.some((hc) =>
-                            cardsEqual(hc, c)
-                          );
-                          return (
-                            <Card
-                              key={cIdx}
-                              card={c}
-                              size="sm"
-                              fourColor={fourColor}
-                              highlighted={Boolean(usedInOmaha)}
-                              dimmed={Boolean(omahaEval && !usedInOmaha)}
-                            />
-                          );
-                        })}
-                        {omahaEval && (
+                        {validCards.length > 0 ? (
+                          validCards.map((c, cIdx) => {
+                            const usedInOmaha = omahaEval?.holeCardsUsed.some((hc) =>
+                              cardsEqual(hc, c)
+                            );
+                            return (
+                              <Card
+                                key={cIdx}
+                                card={c}
+                                size="sm"
+                                fourColor={fourColor}
+                                highlighted={Boolean(usedInOmaha)}
+                                dimmed={Boolean(omahaEval && !usedInOmaha)}
+                              />
+                            );
+                          })
+                        ) : (
+                          Array.from({ length: 5 }).map((_, cIdx) => (
+                            <Card key={cIdx} faceDown size="sm" fourColor={fourColor} />
+                          ))
+                        )}
+                        {omahaEval ? (
                           <span className="ml-auto font-mono text-[10px] text-white/50 max-w-[130px] text-right">
                             Highlighted 2 cards used with 3 board cards
+                          </span>
+                        ) : (
+                          <span className="ml-auto font-mono text-[10px] text-white/45">
+                            Uncontested (Mucked)
                           </span>
                         )}
                       </div>
