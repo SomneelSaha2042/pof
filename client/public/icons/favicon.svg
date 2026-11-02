@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Furious Five app icon</title>
+  <desc id="desc">Rounded felt-table app icon with fan of five cards, gold chip ring, and F5 mark.</desc>
+
+  <defs>
+    <linearGradient id="felt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#176b49"/>
+      <stop offset="0.55" stop-color="#0e4932"/>
+      <stop offset="1" stop-color="#0a3424"/>
+    </linearGradient>
+    <radialGradient id="spot" cx="30%" cy="22%" r="80%">
+      <stop offset="0" stop-color="#47c7a4" stop-opacity="0.32"/>
+      <stop offset="0.45" stop-color="#1f8a70" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#061b13" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff0a4"/>
+      <stop offset="0.42" stop-color="#f6c542"/>
+      <stop offset="1" stop-color="#c98e1a"/>
+    </linearGradient>
+    <linearGradient id="ruby" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff8a80"/>
+      <stop offset="1" stop-color="#c24747"/>
+    </linearGradient>
+    <pattern id="feltGrid" width="34" height="34" patternUnits="userSpaceOnUse" patternTransform="rotate(15)">
+      <path d="M0 17 H34 M17 0 V34" stroke="#47c7a4" stroke-opacity="0.08" stroke-width="2"/>
+    </pattern>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#051c14" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="108" fill="url(#felt)"/>
+  <rect width="512" height="512" rx="108" fill="url(#spot)"/>
+  <rect x="0" y="0" width="512" height="512" rx="108" fill="url(#feltGrid)" opacity="0.8"/>
+  <circle cx="256" cy="256" r="190" fill="none" stroke="#061b13" stroke-opacity="0.3" stroke-width="14"/>
+  <circle cx="256" cy="256" r="178" fill="none" stroke="url(#gold)" stroke-width="10" stroke-dasharray="34 18"/>
+  <g filter="url(#shadow)">
+    <g transform="translate(256 250)">
+      <rect x="-174" y="-112" width="124" height="178" rx="22" fill="#fffaf0" stroke="#233746" stroke-width="6" transform="rotate(-20)"/>
+      <rect x="-120" y="-134" width="124" height="178" rx="22" fill="#fffaf0" stroke="#233746" stroke-width="6" transform="rotate(-10)"/>
+      <rect x="-62" y="-150" width="124" height="188" rx="24" fill="#fffaf0" stroke="#233746" stroke-width="7"/>
+      <rect x="-4" y="-134" width="124" height="178" rx="22" fill="#fffaf0" stroke="#233746" stroke-width="6" transform="rotate(10)"/>
+      <rect x="50" y="-112" width="124" height="178" rx="22" fill="#fffaf0" stroke="#233746" stroke-width="6" transform="rotate(20)"/>
+      <path d="M-25 -108 h50 a14 14 0 0 1 14 14 v34 a14 14 0 0 1 -14 14 h-50z" fill="url(#ruby)" opacity="0.92"/>
+      <path d="M-31 -23 h62" stroke="#1f8a70" stroke-width="12" stroke-linecap="round"/>
+      <path d="M-22 24 h44" stroke="#f6c542" stroke-width="12" stroke-linecap="round"/>
+    </g>
+  </g>
+  <g transform="translate(256 337)">
+    <rect x="-116" y="-42" width="232" height="84" rx="42" fill="#0c1016" fill-opacity="0.82" stroke="#f6c542" stroke-width="6"/>
+    <text x="-61" y="21" font-family="Poppins, Inter, system-ui, sans-serif" font-size="78" font-weight="800" fill="#fdfbf5" letter-spacing="-6">F5</text>
+    <circle cx="73" cy="0" r="23" fill="#f6c542"/>
+    <circle cx="73" cy="0" r="12" fill="#1f8a70"/>
+  </g>
+</svg>

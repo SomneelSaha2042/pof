@@ -1,0 +1,32 @@
+{
+  "name": "Furious Five",
+  "short_name": "Furious5",
+  "description": "Real-time multiplayer card game with felt-table polish, chip accents, timer cues, and card-combo strategy.",
+  "theme_color": "#145a3d",
+  "background_color": "#0c1016",
+  "display": "standalone",
+  "icons": [
+    {
+      "src": "/icons/F5.png",
+      "sizes": "1254x1254",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/F5.png",
+      "sizes": "1254x1254",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/furious5-maskable-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/furious5-maskable-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

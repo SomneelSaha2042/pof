@@ -1,0 +1,240 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #090b10;
+  --foreground: #e9ecf5;
+  --muted: rgba(20, 31, 45, 0.4);
+  --muted-foreground: #a1a9c1;
+  --card: rgba(14, 20, 28, 0.65);
+  --card-foreground: #f2f5ff;
+  --popover: rgba(14, 20, 28, 0.85);
+  --popover-foreground: #f2f5ff;
+  --primary: #00e699;
+  --primary-foreground: #021a11;
+  --secondary: #1a2733;
+  --secondary-foreground: #dbe3f5;
+  --accent: #f6c542;
+  --accent-foreground: #1a1f29;
+  --destructive: #ff5e5e;
+  --destructive-foreground: #fff;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.1);
+  --ring: rgba(0, 230, 153, 0.5);
+  --chart-1: #00e699;
+  --chart-2: #f6c542;
+  --chart-3: #ff5e5e;
+  --chart-4: #5b7bff;
+  --chart-5: #a891ff;
+  --sidebar-background: rgba(10, 14, 20, 0.7);
+  --sidebar-foreground: #e9ecf5;
+  --sidebar-primary: #00e699;
+  --sidebar-primary-foreground: #021a11;
+  --sidebar-accent: rgba(0, 230, 153, 0.1);
+  --sidebar-accent-foreground: #00e699;
+  --sidebar-border: rgba(255, 255, 255, 0.05);
+  --sidebar-ring: rgba(0, 230, 153, 0.4);
+  --felt-green: #051c11;
+  --action-emerald: #00e699;
+  --victory-gold: #f6c542;
+  --loss-crimson: #ff5e5e;
+  --surface-cream: #0c1016;
+  --felt-base: #051c11;
+  --felt-grid: rgba(0, 230, 153, 0.04);
+  --felt-border: rgba(0, 230, 153, 0.15);
+  --chip-gold: #f6c542;
+  --chip-slate: #1a2733;
+  --chip-emerald: #00e699;
+  --chip-ruby: #ff5e5e;
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Poppins', 'Inter', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', ui-monospace, monospace;
+  --heading-weight: 600;
+  --body-weight: 400;
+  --tracking-normal: 0;
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.6;
+  --radius: 20px;
+  --shadow-table: 0 40px 60px -30px rgba(0, 0, 0, 0.9), 0 0 40px rgba(0, 230, 153, 0.05);
+  --shadow-ambient: 0 20px 40px -20px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255,255,255,0.05);
+  --transition-snappy: 220ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+body {
+  @apply font-sans antialiased bg-background text-foreground;
+  letter-spacing: var(--tracking-normal);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-display);
+  font-weight: var(--heading-weight);
+  line-height: var(--line-height-tight);
+}
+
+p,
+span,
+label {
+  font-weight: var(--body-weight);
+  line-height: var(--line-height-normal);
+}
+
+@layer components {
+  .app-backdrop {
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.45), transparent 26rem),
+      var(--background);
+  }
+
+  .chip-stack {
+    background: color-mix(in srgb, var(--chip-gold) 86%, white);
+    border: 1px solid color-mix(in srgb, var(--chip-gold) 58%, black);
+    box-shadow: 0 6px 14px -12px var(--chip-slate);
+    border-radius: 9999px;
+    color: #211806;
+  }
+
+  .glass-panel {
+    background: color-mix(in srgb, var(--card) 92%, transparent);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-ambient);
+  }
+
+  .table-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-ambient);
+  }
+
+  .brand-mark {
+    background:
+      linear-gradient(145deg, color-mix(in srgb, var(--primary) 92%, white), var(--primary));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.28), 0 14px 24px -18px var(--primary);
+  }
+
+  .icon-tile {
+    display: inline-grid;
+    place-items: center;
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--primary) 10%, transparent);
+    color: var(--primary);
+  }
+}
+
+@layer utilities {
+  .felt-surface {
+    position: relative;
+    background: var(--felt-base);
+    border-radius: calc(var(--radius) + 4px);
+    box-shadow: var(--shadow-table);
+    overflow: hidden;
+  }
+
+  .felt-surface::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.12),
+        rgba(0, 0, 0, 0)
+      ),
+      repeating-linear-gradient(45deg, transparent 0 12px, var(--felt-grid) 12px 13px);
+    opacity: 0.85;
+  }
+
+  .felt-surface::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 1px solid rgba(255,255,255,0.16);
+    inset: 1rem;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+
+  .felt-ring {
+    border: 1px solid var(--felt-border);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  }
+
+  .felt-readable {
+    color: rgba(240, 253, 244, 0.95);
+  }
+
+  .felt-readable .text-muted-foreground {
+    color: rgba(209, 250, 229, 0.74);
+  }
+
+  .felt-readable .text-primary {
+    color: #5eead4;
+  }
+
+  .felt-readable .heading-subtle {
+    color: rgba(209, 250, 229, 0.78);
+  }
+
+  .heading-subtle {
+    font-family: var(--font-display);
+    font-weight: var(--heading-weight);
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .text-mono {
+    font-family: var(--font-mono);
+    letter-spacing: 0.04em;
+  }
+
+  .stack-gap {
+    gap: clamp(0.75rem, 1.6vw, 1.5rem);
+  }
+
+  .surface-soft {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-ambient);
+  }
+
+  .shadow-table {
+    box-shadow: var(--shadow-table);
+  }
+
+  .felt-texture {
+    background-image: url("https://www.transparenttextures.com/patterns/felt.png");
+  }
+
+  .glass-card {
+    background: color-mix(in srgb, var(--card) 94%, transparent);
+    backdrop-filter: blur(10px);
+  }
+
+  .chunky-button {
+    box-shadow: 0 4px 0 0 rgba(0, 0, 0, 0.15);
+  }
+
+  .chunky-button:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 0 rgba(0, 0, 0, 0.15);
+  }
+
+  .card-shadow {
+    box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.3);
+  }
+
+  .table-inner-glow {
+    box-shadow: inset 0 0 40px rgba(0,0,0,0.2);
+  }
+
+  .timer-progress {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 26;
+    transition: stroke-dashoffset 1s linear;
+  }
+}
