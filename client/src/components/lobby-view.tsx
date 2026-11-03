@@ -49,6 +49,7 @@ export function LobbyView({
   const [customAnte, setCustomAnte] = useState(gameState.ante.toString());
 
   const currentPlayer = gameState.players.find((p) => p.id === playerId);
+  const isSpectator = !currentPlayer;
   const allReady =
     gameState.players.length >= 2 && gameState.players.every((p) => p.ready);
   const readyCount = gameState.players.filter((p) => p.ready).length;
@@ -104,7 +105,7 @@ export function LobbyView({
                 {gameState.players.length}/8 SEATS
               </span>
             </div>
-            {gameState.players.length < 8 && (
+            {!isSpectator && gameState.players.length < 8 && (
               <Button
                 type="button"
                 variant="outline"
@@ -324,48 +325,59 @@ export function LobbyView({
         </div>
 
         {/* Ready Up & Start Game CTAs */}
-        <div className="grid md:grid-cols-2 gap-4 mb-8">
-          <button
-            onClick={onToggleReady}
-            data-testid="button-toggle-ready"
-            className={cn(
-              'chunky-button py-4 rounded-xl font-display font-bold flex items-center justify-center gap-3 transition-all',
-              currentPlayer?.ready
-                ? 'bg-loss-crimson hover:brightness-110 text-rose-950 shadow-[0_4px_0_0_rgba(190,18,60,0.4)]'
-                : 'bg-action-emerald hover:brightness-110 text-emerald-950 shadow-[0_4px_0_0_rgba(16,185,129,0.4)]'
-            )}
-          >
-            {currentPlayer?.ready ? (
-              <XCircle className="h-5 w-5" />
-            ) : (
-              <CheckCircle2 className="h-5 w-5" />
-            )}
-            {currentPlayer?.ready ? 'Not Ready' : 'Ready Up'}
-          </button>
+        {!isSpectator ? (
+          <div className="grid md:grid-cols-2 gap-4 mb-8">
+            <button
+              onClick={onToggleReady}
+              data-testid="button-toggle-ready"
+              className={cn(
+                'chunky-button py-4 rounded-xl font-display font-bold flex items-center justify-center gap-3 transition-all',
+                currentPlayer?.ready
+                  ? 'bg-loss-crimson hover:brightness-110 text-rose-950 shadow-[0_4px_0_0_rgba(190,18,60,0.4)]'
+                  : 'bg-action-emerald hover:brightness-110 text-emerald-950 shadow-[0_4px_0_0_rgba(16,185,129,0.4)]'
+              )}
+            >
+              {currentPlayer?.ready ? (
+                <XCircle className="h-5 w-5" />
+              ) : (
+                <CheckCircle2 className="h-5 w-5" />
+              )}
+              {currentPlayer?.ready ? 'Not Ready' : 'Ready Up'}
+            </button>
 
-          <button
-            onClick={onStartGame}
-            disabled={!canStart}
-            data-testid="button-start-game"
-            className={cn(
-              'py-4 rounded-xl font-display font-bold flex items-center justify-center gap-3 transition-all',
-              canStart
-                ? 'chunky-button bg-amber-400 hover:brightness-110 text-slate-950 shadow-[0_4px_0_0_rgba(180,83,9,0.5)]'
-                : 'bg-muted text-muted-foreground cursor-not-allowed opacity-80 border border-border'
-            )}
+            <button
+              onClick={onStartGame}
+              disabled={!canStart}
+              data-testid="button-start-game"
+              className={cn(
+                'py-4 rounded-xl font-display font-bold flex items-center justify-center gap-3 transition-all',
+                canStart
+                  ? 'chunky-button bg-amber-400 hover:brightness-110 text-slate-950 shadow-[0_4px_0_0_rgba(180,83,9,0.5)]'
+                  : 'bg-muted text-muted-foreground cursor-not-allowed opacity-80 border border-border'
+              )}
+            >
+              {canStart ? (
+                <PlayCircle className="h-5 w-5" />
+              ) : (
+                <Search className="h-5 w-5 animate-pulse" />
+              )}
+              {canStart
+                ? 'Deal First Hand'
+                : gameState.players.length < 2
+                ? 'Need 2+ Players'
+                : 'Waiting for Ready'}
+            </button>
+          </div>
+        ) : (
+          <div
+            className="mb-8 rounded-2xl border border-amber-400/35 bg-amber-500/10 p-4 text-center"
+            data-testid="spectator-lobby-banner"
           >
-            {canStart ? (
-              <PlayCircle className="h-5 w-5" />
-            ) : (
-              <Search className="h-5 w-5 animate-pulse" />
-            )}
-            {canStart
-              ? 'Deal First Hand'
-              : gameState.players.length < 2
-              ? 'Need 2+ Players'
-              : 'Waiting for Ready'}
-          </button>
-        </div>
+            <div className="font-display text-sm font-bold text-amber-300">
+              Spectating Lobby — Waiting for seated players to start the table
+            </div>
+          </div>
+        )}
 
         {/* Rules Reference */}
         <div className="bg-muted rounded-2xl p-5 border border-border">

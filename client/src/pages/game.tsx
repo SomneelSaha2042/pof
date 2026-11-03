@@ -33,7 +33,9 @@ export default function Game() {
     gameState,
     playerId,
     roomCode,
+    isSpectator,
     isConnected,
+    spectateRoom,
     setAnte,
     addBot,
     removeBot,
@@ -47,6 +49,14 @@ export default function Game() {
     staleSession,
     markSessionAsStale,
   } = useGameSocket();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const spectateCode = params.get('spectate');
+    if (spectateCode && (!roomCode || roomCode !== spectateCode.toUpperCase())) {
+      spectateRoom(spectateCode.toUpperCase());
+    }
+  }, [roomCode, spectateRoom]);
 
   useEffect(() => {
     if (!roomCode && !playerId) {
@@ -279,6 +289,18 @@ export default function Game() {
             </span>
           </div>
 
+          {isSpectator && (
+            <div
+              className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/15 rounded-full border border-amber-400/40"
+              data-testid="spectator-mode-badge"
+            >
+              <Eye className="h-3.5 w-3.5 text-amber-300" />
+              <span className="font-mono text-[10px] font-extrabold uppercase tracking-wider text-amber-300">
+                Spectating
+              </span>
+            </div>
+          )}
+
           <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 rounded-full border border-emerald-500/20">
             <div
               className={cn(
@@ -382,6 +404,7 @@ export default function Game() {
           <SettlementView
             gameState={effectiveGameState}
             fourColor={fourColor}
+            isSpectator={isSpectator}
             onStartNewRound={startNewRound}
             onSetAnte={setAnte}
           />

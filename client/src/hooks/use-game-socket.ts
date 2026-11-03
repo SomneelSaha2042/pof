@@ -7,11 +7,13 @@ interface UseGameSocketReturn {
   gameState: GameState | null;
   playerId: string | null;
   roomCode: string | null;
+  isSpectator: boolean;
   isConnected: boolean;
   connectionState: string;
   staleSession: boolean;
   createRoom: (playerName: string, ante?: number) => void;
   joinRoom: (roomCode: string, playerName: string) => void;
+  spectateRoom: (roomCode: string) => void;
   setAnte: (ante: number) => void;
   addBot: () => void;
   removeBot: (botId: string) => void;
@@ -77,6 +79,16 @@ export function useGameSocket(): UseGameSocketReturn {
       toast({
         title: 'Joined Table',
         description: `Connected to ${data.roomCode}`,
+      });
+    });
+
+    gameSocket.on('room:spectating', (data) => {
+      setRoomCode(data.roomCode);
+      setPlayerId(data.playerId);
+      setStaleSession(false);
+      toast({
+        title: 'Spectating Table',
+        description: `Watching ${data.roomCode} live`,
       });
     });
 
@@ -154,6 +166,7 @@ export function useGameSocket(): UseGameSocketReturn {
     return () => {
       gameSocket.off('room:created');
       gameSocket.off('room:joined');
+      gameSocket.off('room:spectating');
       gameSocket.off('state:update');
       gameSocket.off('notification');
       gameSocket.off('error');
@@ -181,6 +194,10 @@ export function useGameSocket(): UseGameSocketReturn {
 
   const joinRoom = useCallback((code: string, playerName: string) => {
     gameSocket.send('room:join', { roomCode: code, playerName });
+  }, []);
+
+  const spectateRoom = useCallback((code: string) => {
+    gameSocket.send('room:spectate', { roomCode: code.trim().toUpperCase() });
   }, []);
 
   const setAnte = useCallback((ante: number) => {
@@ -234,15 +251,24 @@ export function useGameSocket(): UseGameSocketReturn {
     setStaleSession(true);
   }, []);
 
+  const isSpectator = Boolean(
+    playerId?.startsWith('spectator_') ||
+      (gameState &&
+        playerId &&
+        !gameState.players.some((p) => p.id === playerId))
+  );
+
   return {
     gameState,
     playerId,
     roomCode,
+    isSpectator,
     isConnected,
     connectionState,
     staleSession,
     createRoom,
     joinRoom,
+    spectateRoom,
     setAnte,
     addBot,
     removeBot,

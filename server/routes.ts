@@ -407,8 +407,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
             break;
           }
 
+          case "room:spectate": {
+            const rawCode =
+              typeof message.data?.roomCode === "string"
+                ? message.data.roomCode.trim().toUpperCase()
+                : "";
+            if (!rawCode) {
+              sendError(socket, "INVALID_ROOM_CODE", "Room code is required");
+              break;
+            }
+
+            const gameState = await storage.getRoom(rawCode);
+            if (!gameState) {
+              sendError(socket, "ROOM_NOT_FOUND", "Room not found");
+              break;
+            }
+
+            const spectatorId = `spectator_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+            socket.playerId = spectatorId;
+            socket.roomCode = rawCode;
+            socket.playerName = "Spectator";
+            addSocketToRoom(socket, rawCode);
+
+            sendToSocket(socket, {
+              type: "room:spectating",
+              data: { roomCode: rawCode, playerId: spectatorId },
+            });
+
+            sendToSocket(socket, {
+              type: "state:update",
+              data: gameState,
+            });
+            break;
+          }
+
           case "room:setAnte": {
-            if (!socket.roomCode) {
+            if (!socket.roomCode || !socket.playerId) {
               sendError(socket, "NOT_IN_ROOM", "Not in a room");
               break;
             }
@@ -416,6 +450,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             try {
               const updatedState = await storage.mutateRoom(socket.roomCode, async (gameState) => {
+                const isSeated = gameState.players.some(
+                  (p) => p.id === socket.playerId && !p.isBot,
+                );
+                if (!isSeated) {
+                  throw new Error("Spectators cannot change the table ante");
+                }
                 return setRoomAnte(gameState, parsed.ante);
               });
 
@@ -434,12 +474,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           case "room:addBot": {
-            if (!socket.roomCode) {
+            if (!socket.roomCode || !socket.playerId) {
               sendError(socket, "NOT_IN_ROOM", "Not in a room");
               break;
             }
             try {
               const updatedState = await storage.mutateRoom(socket.roomCode, async (gameState) => {
+                const isSeated = gameState.players.some(
+                  (p) => p.id === socket.playerId && !p.isBot,
+                );
+                if (!isSeated) {
+                  throw new Error("Spectators cannot add bots");
+                }
                 return addBotPlayer(gameState);
               });
 
@@ -454,7 +500,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           case "room:removeBot": {
-            if (!socket.roomCode) {
+            if (!socket.roomCode || !socket.playerId) {
               sendError(socket, "NOT_IN_ROOM", "Not in a room");
               break;
             }
@@ -465,6 +511,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
             try {
               const updatedState = await storage.mutateRoom(socket.roomCode, async (gameState) => {
+                const isSeated = gameState.players.some(
+                  (p) => p.id === socket.playerId && !p.isBot,
+                );
+                if (!isSeated) {
+                  throw new Error("Spectators cannot remove bots");
+                }
                 return removeBotPlayer(gameState, botId);
               });
 
@@ -510,13 +562,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           case "game:start": {
-            if (!socket.roomCode) {
+            if (!socket.roomCode || !socket.playerId) {
               sendError(socket, "NOT_IN_ROOM", "Not in a room");
               break;
             }
 
             try {
               const updatedState = await storage.mutateRoom(socket.roomCode, async (gameState) => {
+                const isSeated = gameState.players.some(
+                  (p) => p.id === socket.playerId && !p.isBot,
+                );
+                if (!isSeated) {
+                  throw new Error("Spectators cannot start the game");
+                }
                 const next = startRound(gameState);
                 if (process.env.NODE_ENV !== "production") {
                   checkInvariants(next);
@@ -606,13 +664,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           case "round:new": {
-            if (!socket.roomCode) {
+            if (!socket.roomCode || !socket.playerId) {
               sendError(socket, "NOT_IN_ROOM", "Not in a room");
               break;
             }
 
             try {
               const updatedState = await storage.mutateRoom(socket.roomCode, async (gameState) => {
+                const isSeated = gameState.players.some(
+                  (p) => p.id === socket.playerId && !p.isBot,
+                );
+                if (!isSeated) {
+                  throw new Error("Spectators cannot deal the next hand");
+                }
                 const next = startRound(gameState);
                 if (process.env.NODE_ENV !== "production") {
                   checkInvariants(next);
@@ -659,6 +723,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 socket.playerName = player.name;
                 const updatedState = await updatePlayerConnection(roomCode, playerId, true);
                 gameState = updatedState ?? gameState;
+              } else if (playerId.startsWith("spectator_")) {
+                socket.playerId = playerId;
+                socket.roomCode = roomCode;
+                socket.playerName = "Spectator";
               }
             }
 

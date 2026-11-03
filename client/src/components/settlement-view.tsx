@@ -18,6 +18,7 @@ import {
 interface SettlementViewProps {
   gameState: GameState;
   fourColor?: boolean;
+  isSpectator?: boolean;
   onStartNewRound: () => void;
   onSetAnte?: (ante: number) => void;
 }
@@ -27,6 +28,7 @@ const ANTE_PRESETS = [5, 10, 20, 25, 50, 100];
 export function SettlementView({
   gameState,
   fourColor = true,
+  isSpectator = false,
   onStartNewRound,
   onSetAnte,
 }: SettlementViewProps) {
@@ -69,37 +71,45 @@ export function SettlementView({
         </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-          {onSetAnte && (
-            <div className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5">
-              <span className="font-mono text-[10px] uppercase text-white/50 mr-1">
-                Next Ante:
-              </span>
-              {ANTE_PRESETS.map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  onClick={() => onSetAnte(preset)}
-                  className={cn(
-                    'px-2 py-0.5 rounded-md font-mono text-xs font-bold transition-colors',
-                    gameState.ante === preset
-                      ? 'bg-emerald-500 text-slate-950'
-                      : 'text-white/70 hover:bg-white/10'
-                  )}
-                >
-                  {preset}
-                </button>
-              ))}
+          {!isSpectator ? (
+            <>
+              {onSetAnte && (
+                <div className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5">
+                  <span className="font-mono text-[10px] uppercase text-white/50 mr-1">
+                    Next Ante:
+                  </span>
+                  {ANTE_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => onSetAnte(preset)}
+                      className={cn(
+                        'px-2 py-0.5 rounded-md font-mono text-xs font-bold transition-colors',
+                        gameState.ante === preset
+                          ? 'bg-emerald-500 text-slate-950'
+                          : 'text-white/70 hover:bg-white/10'
+                      )}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <Button
+                onClick={onStartNewRound}
+                data-testid="button-next-hand"
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-display font-black px-6 py-6 rounded-xl shadow-[0_0_25px_rgba(16,185,129,0.45)] text-base"
+              >
+                <Play className="h-5 w-5 mr-2 fill-current" />
+                Deal Next Hand
+              </Button>
+            </>
+          ) : (
+            <div className="rounded-xl border border-amber-400/35 bg-amber-500/10 px-4 py-2.5 font-mono text-xs font-bold text-amber-300">
+              Spectating — Waiting for players to deal Hand #{gameState.roundNumber + 1}
             </div>
           )}
-
-          <Button
-            onClick={onStartNewRound}
-            data-testid="button-next-hand"
-            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-display font-black px-6 py-6 rounded-xl shadow-[0_0_25px_rgba(16,185,129,0.45)] text-base"
-          >
-            <Play className="h-5 w-5 mr-2 fill-current" />
-            Deal Next Hand
-          </Button>
         </div>
       </div>
 

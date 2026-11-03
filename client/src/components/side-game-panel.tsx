@@ -137,7 +137,9 @@ export function SideGamePanel({
                 {foldPlayers.length} Locked In)
               </h3>
               <p className="text-xs text-white/65">
-                You potted the Main Pot! Waiting for folding players to lock in their two 2-card boards.
+                {currentPlayer
+                  ? 'You potted the Main Pot! Waiting for folding players to lock in their two 2-card boards.'
+                  : 'Spectating — Waiting for folding players to lock in their two 2-card boards.'}
               </p>
             </div>
           </div>

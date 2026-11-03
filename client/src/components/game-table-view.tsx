@@ -26,6 +26,7 @@ import {
   Crown,
   Trophy,
   ArrowRight,
+  Eye,
 } from 'lucide-react';
 
 export type RunoutStage = 'flop' | 'pre_turn' | 'turn' | 'river' | 'complete';
@@ -80,6 +81,16 @@ const OPPONENT_LAYOUTS: Record<number, string[]> = {
     'top-1/2 -translate-y-1/2 right-4',
     'bottom-20 right-5',
   ],
+  8: [
+    'bottom-6 left-1/2 -translate-x-1/2',
+    'bottom-20 left-5',
+    'top-1/2 -translate-y-1/2 left-4',
+    'top-7 left-[22%] -translate-x-1/2',
+    'top-4 left-1/2 -translate-x-1/2',
+    'top-7 left-[78%] -translate-x-1/2',
+    'top-1/2 -translate-y-1/2 right-4',
+    'bottom-20 right-5',
+  ],
 };
 
 function PokerChipIcon({ className }: { className?: string }) {
@@ -106,9 +117,10 @@ export function GameTableView({
   onOpenSettlement,
 }: GameTableViewProps) {
   const heroIndex = gameState.players.findIndex((p) => p.id === playerId);
-  const heroPlayer =
-    heroIndex !== -1 ? gameState.players[heroIndex] : gameState.players[0];
+  const isSpectator = heroIndex === -1;
+  const heroPlayer = !isSpectator ? gameState.players[heroIndex] : null;
   const isMyTurn =
+    !isSpectator &&
     gameState.phase === 'pot_or_fold' &&
     gameState.players[gameState.turnIdx]?.id === playerId &&
     heroPlayer?.decision === 'pending';
@@ -125,9 +137,9 @@ export function GameTableView({
   const isRunoutActive =
     gameState.phase !== 'pot_or_fold' && runoutStage !== 'complete';
 
-  // Rotate opponents clockwise starting from the seat to Hero's left
+  // Rotate opponents clockwise starting from the seat to Hero's left (or all seats for spectators)
   const opponents = useMemo(() => {
-    if (heroIndex === -1) return gameState.players.slice(1);
+    if (heroIndex === -1) return gameState.players;
     return [
       ...gameState.players.slice(heroIndex + 1),
       ...gameState.players.slice(0, heroIndex),
@@ -160,7 +172,7 @@ export function GameTableView({
   }, [heroValidCards]);
 
   const oppPositions =
-    OPPONENT_LAYOUTS[Math.min(Math.max(opponents.length, 1), 7)];
+    OPPONENT_LAYOUTS[Math.min(Math.max(opponents.length, 1), 8)];
 
   const isCardInHeroOmaha = (card: CardType) => {
     if (!heroOmahaEval) return false;
@@ -578,7 +590,7 @@ export function GameTableView({
       {/* ===================================================================== */}
       {/* SPACIOUS 2-ROW HERO HAND & POKERNOW ACTION DOCK                       */}
       {/* ===================================================================== */}
-      {heroPlayer && (
+      {heroPlayer ? (
         <div
           className="mx-auto w-full max-w-[1220px] rounded-2xl border border-white/15 bg-[#0d1520]/95 p-5 sm:p-7 text-white shadow-2xl backdrop-blur-md space-y-5"
           data-testid="hero-player-dock"
@@ -772,6 +784,31 @@ export function GameTableView({
               )}
             </div>
           )}
+        </div>
+      ) : (
+        <div
+          className="mx-auto w-full max-w-[1220px] rounded-2xl border border-amber-400/25 bg-[#0d1520]/95 p-5 text-white shadow-xl backdrop-blur-md flex flex-col sm:flex-row items-center justify-between gap-4"
+          data-testid="spectator-table-dock"
+        >
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300 shrink-0">
+              <Eye className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="font-display font-bold text-sm sm:text-base text-white">
+                Spectator Mode — Live Table View
+              </div>
+              <p className="text-xs text-white/60 mt-0.5">
+                Player hole cards remain face-down during betting and reveal automatically at Main Pot or Side Game showdown.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 font-mono text-xs text-amber-300 bg-amber-500/10 border border-amber-400/30 px-4 py-2 rounded-xl shrink-0">
+            <span>{gameState.players.length} Seated Players</span>
+            <span className="text-white/30">•</span>
+            <span>Main Pot: {gameState.mainPot}</span>
+          </div>
         </div>
       )}
     </div>

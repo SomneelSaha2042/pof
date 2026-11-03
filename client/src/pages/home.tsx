@@ -18,6 +18,7 @@ import {
   BookOpen,
   Coins,
   Crown,
+  Eye,
 } from 'lucide-react';
 import {
   Accordion,
@@ -34,7 +35,7 @@ export default function Home() {
   const [playerName, setPlayerName] = useState('');
   const [selectedAnte, setSelectedAnte] = useState(10);
   const [joinRoomCode, setJoinRoomCode] = useState('');
-  const { createRoom, joinRoom, roomCode, clearRoom } = useGameSocket();
+  const { createRoom, joinRoom, spectateRoom, roomCode, clearRoom } = useGameSocket();
 
   useEffect(() => {
     if (!roomCode) {
@@ -109,7 +110,7 @@ export default function Home() {
             const response = await fetch(`/api/rooms/${code}/join`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ playerName: name }),
+              body: JSON.stringify({ roomCode: code, playerName: name }),
             });
 
             const data = await response.json();
@@ -127,6 +128,37 @@ export default function Home() {
       }, 2500);
     } catch (error) {
       console.error('Room join error:', error);
+    }
+  };
+
+  const handleSpectateRoom = async () => {
+    if (!joinRoomCode.trim()) return;
+    const code = joinRoomCode.trim().toUpperCase();
+
+    try {
+      spectateRoom(code);
+
+      setTimeout(async () => {
+        const currentRoomCode = localStorage.getItem('furious-five-room-code');
+        if (!currentRoomCode || currentRoomCode !== code) {
+          try {
+            const response = await fetch(`/api/rooms/${code}`);
+            const data = await response.json();
+            if (data.success) {
+              const specId = `spectator_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+              localStorage.setItem('furious-five-room-code', code);
+              localStorage.setItem('furious-five-player-id', specId);
+              setLocation('/game');
+            } else {
+              alert(`Failed to spectate room: ${data.error || 'Room not found'}`);
+            }
+          } catch (error) {
+            console.error('HTTP spectate error:', error);
+          }
+        }
+      }, 2000);
+    } catch (error) {
+      console.error('Spectate error:', error);
     }
   };
 
@@ -309,15 +341,29 @@ export default function Home() {
                       className="bg-card border-border text-foreground font-mono rounded-xl tracking-widest"
                     />
                   </div>
-                  <button
-                    onClick={handleJoinRoom}
-                    disabled={!playerName.trim() || !joinRoomCode.trim()}
-                    data-testid="button-join-room"
-                    className="w-full chunky-button bg-action-emerald hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-display font-black py-3.5 rounded-xl shadow-[0_4px_0_0_#064e3b] transition-all flex items-center justify-center gap-2"
-                  >
-                    <UserPlus className="h-5 w-5" />
-                    Join Table
-                  </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <button
+                      onClick={handleJoinRoom}
+                      disabled={!playerName.trim() || !joinRoomCode.trim()}
+                      data-testid="button-join-room"
+                      className="w-full chunky-button bg-action-emerald hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-display font-black py-3.5 rounded-xl shadow-[0_4px_0_0_#064e3b] transition-all flex items-center justify-center gap-2"
+                    >
+                      <UserPlus className="h-5 w-5" />
+                      Join Table
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSpectateRoom}
+                      disabled={!joinRoomCode.trim()}
+                      data-testid="button-spectate-room"
+                      className="w-full rounded-xl border border-amber-400/40 bg-amber-500/15 hover:bg-amber-500/25 disabled:opacity-45 disabled:cursor-not-allowed text-amber-300 font-display font-bold py-3.5 transition-all flex items-center justify-center gap-2"
+                      title="Watch live without taking a seat (only Room Code required)"
+                    >
+                      <Eye className="h-5 w-5" />
+                      Spectate
+                    </button>
+                  </div>
                 </div>
               </div>
             </motion.div>
