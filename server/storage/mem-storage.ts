@@ -12,7 +12,7 @@ export class MemStorage implements IStorage {
 
     setInterval(() => {
       this.cleanupInactiveRooms();
-    }, 30 * 60 * 1000);
+    }, 30 * 60 * 1000).unref();
   }
 
   async createRoom(gameState: GameState): Promise<string> {

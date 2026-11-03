@@ -133,6 +133,54 @@ test("Prompt examples: AA22K vs JJ882 pushes, and AAK92 vs JJ82A pushes", () => 
   );
   assert.equal(res2.winnerId, null);
   assert.equal(res2.chipAmount, 0);
+
+  // 3. Alice (99 / Bac 9) vs Bob (66 / Bac 9) -> Alice wins high board (99 > 66), tied low board (Bac 9 == Bac 9) -> Alice wins 1x ante!
+  const eval99Bac9 = computeBestSideArrangement([
+    c(1, "H"),
+    c(9, "H"),
+    c(9, "D"),
+    c(8, "S"),
+    c(4, "D"),
+  ]);
+  const eval66Bac9 = computeBestSideArrangement([
+    c(1, "D"),
+    c(6, "H"),
+    c(6, "D"),
+    c(5, "C"),
+    c(4, "S"),
+  ]);
+  const res3 = compareSideHands1v1(
+    { id: "p1", name: "Alice", eval: eval99Bac9 },
+    { id: "p2", name: "Bob", eval: eval66Bac9 },
+    ante,
+  );
+  assert.equal(res3.winnerId, "p1");
+  assert.equal(res3.multiplier, 1);
+  assert.equal(res3.chipAmount, 10);
+
+  // 4. Charlie (Bac 9 / Bac 7) vs Diana (Bac 9 / Bac 8) -> Tied high board (Bac 9 == Bac 9), Diana wins low board (8 > 7) -> Diana wins 1x ante!
+  const evalBac97 = computeBestSideArrangement([
+    c(11, "H"),
+    c(10, "D"),
+    c(9, "S"),
+    c(5, "S"),
+    c(2, "H"),
+  ]);
+  const evalBac98 = computeBestSideArrangement([
+    c(1, "S"),
+    c(10, "H"),
+    c(9, "D"),
+    c(7, "C"),
+    c(4, "D"),
+  ]);
+  const res4 = compareSideHands1v1(
+    { id: "p3", name: "Charlie", eval: evalBac97 },
+    { id: "p4", name: "Diana", eval: evalBac98 },
+    ante,
+  );
+  assert.equal(res4.winnerId, "p4");
+  assert.equal(res4.multiplier, 1);
+  assert.equal(res4.chipAmount, 10);
 });
 
 test("Omaha PLO5 rule: must use exactly 2 cards from hand and 3 from community board", () => {
@@ -240,5 +288,14 @@ test("Security & state redaction: opponent cards, deck, mucked hands, and secret
   assert.ok(bobViewSettlement.players[0].hand.every((card) => card === null));
   // Settlement keys use anonymized seat IDs for opponents
   assert.deepEqual(bobViewSettlement.settlement?.mainPotResult.winnerIds, ["seat_0"]);
+
+  // 4. Spectator view: all human IDs are anonymized, flop/uncontested cards stay hidden, showdown side hands reveal at settlement
+  const spectatorViewSettlement = redactGameStateForPlayer(state, "spectator_viewer_1");
+  assert.equal(spectatorViewSettlement.players[0].id, "seat_0");
+  assert.equal(spectatorViewSettlement.players[1].id, "seat_1");
+  assert.equal(spectatorViewSettlement.players[2].id, "seat_2");
+  assert.ok(spectatorViewSettlement.players[0].hand.every((card) => card === null));
+  assert.ok(spectatorViewSettlement.players[1].hand.every((card) => card !== null));
+  assert.ok(spectatorViewSettlement.players[2].hand.every((card) => card !== null));
 });
 

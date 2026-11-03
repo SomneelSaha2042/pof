@@ -625,12 +625,15 @@ export function compareSideHands1v1(
     };
   }
 
-  // Popo vs Popo (4x) or Normal vs Normal (2x)
-  const mult = evalA.tier === "popo" ? 4 : 2;
+  // Popo vs Popo (4x full / 2x half) or Normal vs Normal (2x full / 1x half)
+  const fullMult = evalA.tier === "popo" ? 4 : 2;
+  const halfMult = fullMult / 2;
   const aWinsHigh = evalA.highEval.score > evalB.highEval.score;
   const aWinsLow = evalA.lowEval.score > evalB.lowEval.score;
   const bWinsHigh = evalB.highEval.score > evalA.highEval.score;
   const bWinsLow = evalB.lowEval.score > evalA.lowEval.score;
+  const highTied = evalA.highEval.score === evalB.highEval.score;
+  const lowTied = evalA.lowEval.score === evalB.lowEval.score;
 
   if (aWinsHigh && aWinsLow) {
     return {
@@ -639,8 +642,8 @@ export function compareSideHands1v1(
       playerBId: playerB.id,
       playerBName: playerB.name,
       winnerId: playerA.id,
-      multiplier: mult,
-      chipAmount: mult * ante,
+      multiplier: fullMult,
+      chipAmount: fullMult * ante,
       reason: `${playerA.name} wins both boards (${evalA.highEval.label} > ${evalB.highEval.label} & ${evalA.lowEval.label} > ${evalB.lowEval.label})`,
     };
   }
@@ -652,9 +655,42 @@ export function compareSideHands1v1(
       playerBId: playerB.id,
       playerBName: playerB.name,
       winnerId: playerB.id,
-      multiplier: mult,
-      chipAmount: mult * ante,
+      multiplier: fullMult,
+      chipAmount: fullMult * ante,
       reason: `${playerB.name} wins both boards (${evalB.highEval.label} > ${evalA.highEval.label} & ${evalB.lowEval.label} > ${evalA.lowEval.label})`,
+    };
+  }
+
+  // Win 1 board + Tie 1 board -> half multiplier (1x for Normal, 2x for Popo)
+  if ((aWinsHigh && lowTied) || (highTied && aWinsLow)) {
+    const wonBoardDesc = aWinsHigh
+      ? `high board (${evalA.highEval.label} > ${evalB.highEval.label}), low tied (${evalA.lowEval.label})`
+      : `low board (${evalA.lowEval.label} > ${evalB.lowEval.label}), high tied (${evalA.highEval.label})`;
+    return {
+      playerAId: playerA.id,
+      playerAName: playerA.name,
+      playerBId: playerB.id,
+      playerBName: playerB.name,
+      winnerId: playerA.id,
+      multiplier: halfMult,
+      chipAmount: halfMult * ante,
+      reason: `${playerA.name} wins ${wonBoardDesc}`,
+    };
+  }
+
+  if ((bWinsHigh && lowTied) || (highTied && bWinsLow)) {
+    const wonBoardDesc = bWinsHigh
+      ? `high board (${evalB.highEval.label} > ${evalA.highEval.label}), low tied (${evalB.lowEval.label})`
+      : `low board (${evalB.lowEval.label} > ${evalA.lowEval.label}), high tied (${evalB.highEval.label})`;
+    return {
+      playerAId: playerA.id,
+      playerAName: playerA.name,
+      playerBId: playerB.id,
+      playerBName: playerB.name,
+      winnerId: playerB.id,
+      multiplier: halfMult,
+      chipAmount: halfMult * ante,
+      reason: `${playerB.name} wins ${wonBoardDesc}`,
     };
   }
 
