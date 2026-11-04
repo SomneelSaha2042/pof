@@ -110,7 +110,7 @@ export default function Home() {
             const response = await fetch(`/api/rooms/${code}/join`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ roomCode: code, playerName: name }),
+              body: JSON.stringify({ roomCode: code, playerName: name, playerId: currentRoomCode === code ? localStorage.getItem('furious-five-player-id') ?? undefined : undefined }),
             });
 
             const data = await response.json();
@@ -207,6 +207,7 @@ export default function Home() {
         </header>
 
         {/* Main Content Grid */}
+        <p className="text-sm text-amber-200/80">Private guest tables: one seat per browser session. Play with people you trust; guest access cannot verify a unique person across devices.</p>
         <main className="grid flex-1 items-start gap-8 xl:grid-cols-[minmax(500px,0.9fr)_minmax(580px,1.1fr)]">
           <div className="flex flex-col gap-6">
             <motion.div

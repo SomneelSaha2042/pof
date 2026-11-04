@@ -4,6 +4,7 @@ import {
   cardToString,
   computeBestSideArrangement,
   evaluateBestOmahaHand,
+  isTableHost,
 } from "../shared/game-engine";
 
 function parseArgs(argv: string[]) {
@@ -182,9 +183,13 @@ async function wsSession<T>(
   baseUrl: string,
   handler: (ws: WebSocket, send: (type: string, data?: any) => void) => Promise<T>,
   timeoutMs = 30000,
+  cookie?: string,
 ): Promise<T> {
   const wsUrl = toWsUrl(baseUrl);
-  const ws = new WebSocket(wsUrl);
+  cookie ??= process.env.POF_GUEST_COOKIE;
+  cookie ??= (await fetch(`${baseUrl.replace(/\/+$/, "")}/api/session`)).headers.get("set-cookie")?.split(";")[0];
+  if (!cookie) throw new Error("Could not establish guest session");
+  const ws = new WebSocket(wsUrl, { headers: { Cookie: cookie } });
 
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -231,8 +236,8 @@ async function setupRoom(baseUrl: string, playerNames: string[], ante: number) {
   }
 
   const roomCode: string = createData.roomCode;
-  const players: { name: string; playerId: string }[] = [
-    { name: playerNames[0], playerId: createData.playerId },
+  const players: { name: string; playerId: string; cookie: string }[] = [
+    { name: playerNames[0], playerId: createData.playerId, cookie: createRes.headers.get("set-cookie")!.split(";")[0] },
   ];
 
   // 2. Join remaining players via HTTP
@@ -246,16 +251,18 @@ async function setupRoom(baseUrl: string, playerNames: string[], ante: number) {
     if (!joinData.success) {
       throw new Error(`Failed to join ${playerNames[i]}: ${joinData.error}`);
     }
-    players.push({ name: playerNames[i], playerId: joinData.playerId });
+    players.push({ name: playerNames[i], playerId: joinData.playerId, cookie: joinRes.headers.get("set-cookie")!.split(";")[0] });
   }
 
   // 3. Ready up all players over WebSocket and start Hand #1
-  for (let i = 0; i < players.length; i++) {
-    const p = players[i];
+  const readyOrder = [...players.slice(1), players[0]];
+  for (let i = 0; i < readyOrder.length; i++) {
+    const p = readyOrder[i];
     const isLast = i === players.length - 1;
     await wsSession(baseUrl, (ws, send) => {
       return new Promise<void>((resolve, reject) => {
-        let step = 0;
+        let requestedReady = false;
+        let requestedStart = false;
         ws.on("message", (raw) => {
           const msg = JSON.parse(raw.toString());
           if (msg.type === "error") {
@@ -263,23 +270,27 @@ async function setupRoom(baseUrl: string, playerNames: string[], ante: number) {
             return;
           }
           if (msg.type === "state:update") {
-            step++;
-            if (step === 1) {
-              send("player:ready");
-            } else if (step === 2) {
-              if (isLast) {
-                send("game:start");
-              } else {
+            const state: GameState = msg.data;
+            if (state.phase !== "lobby") {
+              resolve();
+              return;
+            }
+            if (!requestedReady) {
+              requestedReady = true;
+              send("player:ready", { roundNumber: msg.data.roundNumber, ante: msg.data.ante });
+            } else if (state.players.find(player => player.id === p.playerId)?.ready) {
+              if (isLast && !requestedStart && state.players.every(player => player.ready)) {
+                requestedStart = true;
+                send("game:start", { roundNumber: msg.data.roundNumber });
+              } else if (!isLast) {
                 resolve();
               }
-            } else if (step === 3) {
-              resolve();
             }
           }
         });
         send("game:getState", { roomCode, playerId: p.playerId });
       });
-    });
+    }, 30000, p.cookie);
   }
 
   console.log(JSON.stringify({ roomCode, ante, players }, null, 2));
@@ -432,7 +443,10 @@ async function triggerNextHand(
           if (!bound) {
             bound = true;
             if (state.phase === "settlement") {
-              send("round:new", {});
+              const me = state.players.find(p => p.id === playerId);
+              if (!me?.ready) send("player:ready", { roundNumber: state.roundNumber, ante: state.ante });
+              else if (isTableHost(state, playerId) && state.players.filter(p => !p.sittingOut && p.connected).every(p => p.ready)) send("round:new", { roundNumber: state.roundNumber });
+              else resolve(summarizeStateForAgent(state, playerId));
             } else {
               resolve(summarizeStateForAgent(state, playerId));
             }

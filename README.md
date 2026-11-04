@@ -27,6 +27,29 @@
   - **Normal (2x)**: Must strictly win **both** 2-card boards against the opponent to win 2x, otherwise Push.
 
 ## Local Development
+Guest seats are tied to a signed, HttpOnly browser cookie. A second tab using the
+same cookie cannot take another seat at the same table. Set `SESSION_SECRET` to
+a random secret of at least 32 characters in production and retain it across
+deployments. Native CLI players must retain their setup `cookie` and set
+`POF_GUEST_COOKIE` when resuming that seat.
+
+Guest identity does not prove a unique person: clearing cookies, incognito,
+another device, or a custom client can obtain a fresh guest identity. Use only
+trusted private tables; verified sign-in and table admission are required before
+treating this as competitive multi-account prevention.
+
+The creator hosts the table. Only the host can change stakes, manage bots, or
+deal a hand. Host duties pass to the next connected participant if the host
+leaves. Every human must ready up for each hand; changing the ante revokes
+everyone's readiness. CLI players use `next-hand` to confirm their own readiness,
+then the host uses `next-hand` again once all players are ready.
+
+Players have 30 seconds to choose POT or FOLD. The server automatically folds an
+idle player. Side hands automatically lock after 60 seconds. These deadlines are
+saved with room state and continue after reconnecting or restarting the server.
+Leaving keeps the player's current-hand obligations and sits them out of future
+hands; their accumulated result remains at the table.
+
 
 ```bash
 npm install

@@ -22,11 +22,7 @@ export class MemStorage implements IStorage {
   }
 
   async getRoom(roomCode: string): Promise<GameState | undefined> {
-    const room = this.rooms.get(roomCode);
-    if (room) {
-      this.lastActivity.set(roomCode, Date.now());
-    }
-    return room;
+    return this.rooms.get(roomCode);
   }
 
   async updateRoom(roomCode: string, gameState: GameState): Promise<void> {

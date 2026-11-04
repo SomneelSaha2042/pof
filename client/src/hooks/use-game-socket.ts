@@ -193,8 +193,8 @@ export function useGameSocket(): UseGameSocketReturn {
   );
 
   const joinRoom = useCallback((code: string, playerName: string) => {
-    gameSocket.send('room:join', { roomCode: code, playerName });
-  }, []);
+    gameSocket.send('room:join', { roomCode: code, playerName, playerId: code === roomCode ? playerId ?? undefined : undefined });
+  }, [roomCode, playerId]);
 
   const spectateRoom = useCallback((code: string) => {
     gameSocket.send('room:spectate', { roomCode: code.trim().toUpperCase() });
@@ -213,12 +213,12 @@ export function useGameSocket(): UseGameSocketReturn {
   }, []);
 
   const toggleReady = useCallback(() => {
-    gameSocket.send('player:ready');
-  }, []);
+    if (gameState) gameSocket.send('player:ready', { roundNumber: gameState.roundNumber, ante: gameState.ante });
+  }, [gameState]);
 
   const startGame = useCallback(() => {
-    gameSocket.send('game:start');
-  }, []);
+    if (gameState) gameSocket.send('game:start', { roundNumber: gameState.roundNumber });
+  }, [gameState]);
 
   const submitDecision = useCallback((decision: 'pot' | 'fold') => {
     gameSocket.send('turn:decision', { decision });
@@ -229,8 +229,8 @@ export function useGameSocket(): UseGameSocketReturn {
   }, []);
 
   const startNewRound = useCallback(() => {
-    gameSocket.send('round:new');
-  }, []);
+    if (gameState) gameSocket.send('round:new', { roundNumber: gameState.roundNumber });
+  }, [gameState]);
 
   const requestGameState = useCallback(() => {
     if (roomCode && playerId) {
@@ -239,6 +239,7 @@ export function useGameSocket(): UseGameSocketReturn {
   }, [roomCode, playerId]);
 
   const clearRoom = useCallback(() => {
+    gameSocket.send('room:leave');
     localStorage.removeItem('furious-five-room-code');
     localStorage.removeItem('furious-five-player-id');
     setRoomCode(null);

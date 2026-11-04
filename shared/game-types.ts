@@ -63,6 +63,7 @@ export interface Player {
   connected: boolean;
   ready: boolean;
   isBot?: boolean;
+  sittingOut?: boolean;
   hand: (Card | null)[];
   chipDelta: number; // cumulative net chips across all hands
   currentHandDelta: number; // net chips won/lost in the current hand
@@ -72,6 +73,7 @@ export interface Player {
   sideEvaluation?: SideHandEvaluation | null;
   sideLocked: boolean;
   userId?: string;
+  guestId?: string;
 }
 
 export interface MainPotResult {
@@ -119,6 +121,7 @@ export interface GameState {
   version: number;
   roundNumber: number;
   gameStartTime: number;
+  actionDeadline?: number | null;
 }
 
 // Zod schemas for validation
@@ -150,6 +153,7 @@ export const SideHandArrangementSchema = z.object({
 export const JoinRoomSchema = z.object({
   roomCode: z.string().trim().min(3).max(20),
   playerName: z.string().trim().min(1).max(24),
+  playerId: z.string().max(100).optional(),
 });
 
 export const CreateRoomSchema = z.object({
@@ -160,6 +164,9 @@ export const CreateRoomSchema = z.object({
 export const SetAnteSchema = z.object({
   ante: z.number().int().min(1).max(10000),
 });
+
+export const RoundRequestSchema = z.object({ roundNumber: z.number().int().min(1) });
+export const ReadyRequestSchema = RoundRequestSchema.extend({ ante: z.number().int().min(1).max(10000) });
 
 export const FlopDecisionSchema = z.object({
   decision: z.enum(['pot', 'fold']),
@@ -190,6 +197,7 @@ export const GameStateSchema = z.object({
   version: z.number(),
   roundNumber: z.number(),
   gameStartTime: z.number(),
+  actionDeadline: z.number().nullable().optional(),
 });
 
 export const ErrorSchema = z.object({

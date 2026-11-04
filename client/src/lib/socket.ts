@@ -32,13 +32,20 @@ export class GameSocket {
     }
   }
   
-  private connect(): void {
-    this.shouldReconnect = true;
+  private async connect(): Promise<void> {
     if (this.connectionState !== 'reconnecting') {
       this.setConnectionState('connecting');
     }
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/ws`;
+    try {
+      const session = await fetch('/api/session', { credentials: 'same-origin' });
+      if (!session.ok) throw new Error('Could not establish browser session');
+    } catch {
+      if (this.shouldReconnect) this.attemptReconnect();
+      return;
+    }
+    if (!this.shouldReconnect) return;
     
     this.ws = new WebSocket(wsUrl);
     
