@@ -889,6 +889,9 @@ export function togglePlayerReady(state: GameState, playerId: string): GameState
  * - Action starts on the button (`turnIdx = buttonIdx`)
  */
 export function startRound(state: GameState): GameState {
+  if (state.phase !== "lobby" && state.phase !== "settlement") {
+    throw new Error("Cannot redeal an unfinished hand");
+  }
   if (state.players.length < 2) {
     throw new Error("Need at least 2 players to start");
   }
