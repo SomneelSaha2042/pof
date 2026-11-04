@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Card as CardType, GameState } from '@shared/game-types';
-import { cardsEqual } from '@shared/game-engine';
+import { cardsEqual, isTableHost } from '@shared/game-engine';
 import {
   Trophy,
   Crown,
@@ -17,23 +17,31 @@ import {
 
 interface SettlementViewProps {
   gameState: GameState;
+  playerId: string;
   fourColor?: boolean;
   isSpectator?: boolean;
   onStartNewRound: () => void;
   onSetAnte?: (ante: number) => void;
+  onToggleReady: () => void;
 }
 
 const ANTE_PRESETS = [5, 10, 20, 25, 50, 100];
 
 export function SettlementView({
   gameState,
+  playerId,
   fourColor = true,
   isSpectator = false,
   onStartNewRound,
   onSetAnte,
+  onToggleReady,
 }: SettlementViewProps) {
   const settlement = gameState.settlement;
   if (!settlement) return null;
+  const isHost = isTableHost(gameState, playerId);
+  const me = gameState.players.find(p => p.id === playerId);
+  const participants = gameState.players.filter(p => !p.sittingOut && p.connected);
+  const allReady = participants.length >= 2 && participants.every(p => p.ready);
 
   const { mainPotResult, sideMatchups, mainPotDeltas, sideGameDeltas, totalRoundDeltas } =
     settlement;
@@ -73,7 +81,7 @@ export function SettlementView({
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
           {!isSpectator ? (
             <>
-              {onSetAnte && (
+              {isHost && onSetAnte && (
                 <div className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5">
                   <span className="font-mono text-[10px] uppercase text-white/50 mr-1">
                     Next Ante:
@@ -97,12 +105,20 @@ export function SettlementView({
               )}
 
               <Button
+                onClick={onToggleReady}
+                variant="outline"
+                aria-pressed={Boolean(me?.ready)}
+              >
+                {me?.ready ? 'Cancel readiness' : `Ready for ante ${gameState.ante}`}
+              </Button>
+              <Button
                 onClick={onStartNewRound}
+                disabled={!isHost || !allReady}
                 data-testid="button-next-hand"
                 className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-display font-black px-6 py-6 rounded-xl shadow-[0_0_25px_rgba(16,185,129,0.45)] text-base"
               >
                 <Play className="h-5 w-5 mr-2 fill-current" />
-                Deal Next Hand
+                {isHost ? 'Deal Next Hand' : 'Waiting for host'}
               </Button>
             </>
           ) : (

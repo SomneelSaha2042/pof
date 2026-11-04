@@ -5,6 +5,7 @@ import { redactGameStateForPlayer } from "./routes";
 import { expireGameActions, leaveGame } from "../shared/game-engine";
 import { expireRoomActions } from "./game-deadlines";
 import { MemStorage } from "./storage/mem-storage";
+import { setRoomAnte, isTableHost } from "../shared/game-engine";
 
 function readyGame() {
   let state = joinGame(createGame("POF-SECURITY", "Alice", "alice"), "Bob", "bob");
@@ -21,6 +22,22 @@ test("an active hand cannot be redealt or lose outstanding contributions", () =>
   const sideGame = applyFlopDecision(applyFlopDecision(startRound(readyGame()), "alice", "fold"), "bob", "fold");
   assert.equal(sideGame.phase, "side_game");
   assert.throws(() => startRound(sideGame), /unfinished hand/);
+});
+
+test("ante changes revoke consent and every hand needs fresh readiness", () => {
+  const changed = setRoomAnte(readyGame(), 10000);
+  assert.ok(changed.players.every(p => !p.ready));
+  assert.throws(() => startRound(changed), /ready/);
+  let state = startRound(readyGame());
+  state = applyFlopDecision(state, "alice", "pot");
+  state = applyFlopDecision(state, "bob", "pot");
+  assert.equal(state.phase, "settlement");
+  assert.throws(() => startRound(state), /ready/);
+  state = togglePlayerReady(togglePlayerReady(state, "alice"), "bob");
+  assert.equal(startRound(state).roundNumber, 2);
+  assert.equal(isTableHost(state, "alice"), true);
+  assert.equal(isTableHost(state, "bob"), false);
+  assert.equal(isTableHost(leaveGame(state, "alice"), "bob"), true);
 });
 
 test("server deadlines fold idle players, lock side hands, and survive serialization", () => {
@@ -65,6 +82,7 @@ test("leaving settles the current obligation but excludes a seat from future ant
   assert.equal(state.phase, "settlement");
   const total = state.players.reduce((sum, p) => sum + p.chipDelta, 0);
   assert.equal(total, 0);
+  state = togglePlayerReady(togglePlayerReady(state, "bob"), "charlie");
   state = startRound(state);
   assert.equal(state.players[0].potContribution, 0);
   assert.equal(state.players[0].hand.length, 0);

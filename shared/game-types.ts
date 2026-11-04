@@ -164,6 +164,9 @@ export const SetAnteSchema = z.object({
   ante: z.number().int().min(1).max(10000),
 });
 
+export const RoundRequestSchema = z.object({ roundNumber: z.number().int().min(1) });
+export const ReadyRequestSchema = RoundRequestSchema.extend({ ante: z.number().int().min(1).max(10000) });
+
 export const FlopDecisionSchema = z.object({
   decision: z.enum(['pot', 'fold']),
 });

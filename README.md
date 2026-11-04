@@ -27,6 +27,12 @@
   - **Normal (2x)**: Must strictly win **both** 2-card boards against the opponent to win 2x, otherwise Push.
 
 ## Local Development
+The creator hosts the table. Only the host can change stakes, manage bots, or
+deal a hand. Host duties pass to the next connected participant if the host
+leaves. Every human must ready up for each hand; changing the ante revokes
+everyone's readiness. CLI players use `next` to confirm their own readiness,
+then the host uses `next` again once all players are ready.
+
 Players have 30 seconds to choose POT or FOLD. The server automatically folds an
 idle player. Side hands automatically lock after 60 seconds. These deadlines are
 saved with room state and continue after reconnecting or restarting the server.

@@ -4,6 +4,7 @@ import {
   cardToString,
   computeBestSideArrangement,
   evaluateBestOmahaHand,
+  isTableHost,
 } from "../shared/game-engine";
 
 function parseArgs(argv: string[]) {
@@ -250,8 +251,9 @@ async function setupRoom(baseUrl: string, playerNames: string[], ante: number) {
   }
 
   // 3. Ready up all players over WebSocket and start Hand #1
-  for (let i = 0; i < players.length; i++) {
-    const p = players[i];
+  const readyOrder = [...players.slice(1), players[0]];
+  for (let i = 0; i < readyOrder.length; i++) {
+    const p = readyOrder[i];
     const isLast = i === players.length - 1;
     await wsSession(baseUrl, (ws, send) => {
       return new Promise<void>((resolve, reject) => {
@@ -265,10 +267,10 @@ async function setupRoom(baseUrl: string, playerNames: string[], ante: number) {
           if (msg.type === "state:update") {
             step++;
             if (step === 1) {
-              send("player:ready");
+              send("player:ready", { roundNumber: msg.data.roundNumber, ante: msg.data.ante });
             } else if (step === 2) {
               if (isLast) {
-                send("game:start");
+                send("game:start", { roundNumber: msg.data.roundNumber });
               } else {
                 resolve();
               }
@@ -432,7 +434,10 @@ async function triggerNextHand(
           if (!bound) {
             bound = true;
             if (state.phase === "settlement") {
-              send("round:new", {});
+              const me = state.players.find(p => p.id === playerId);
+              if (!me?.ready) send("player:ready", { roundNumber: state.roundNumber, ante: state.ante });
+              else if (isTableHost(state, playerId) && state.players.filter(p => !p.sittingOut && p.connected).every(p => p.ready)) send("round:new", { roundNumber: state.roundNumber });
+              else resolve(summarizeStateForAgent(state, playerId));
             } else {
               resolve(summarizeStateForAgent(state, playerId));
             }

@@ -233,6 +233,7 @@ test("Full POF hand flow: ante, flop pot/fold decisions, side game, settlement, 
   assert.equal(state.settlement?.sideMatchups.length, 1);
 
   // Next hand: button moves to seat 1 (Bob)
+  for (const player of state.players) state = togglePlayerReady(state, player.id);
   state = startRound(state);
   assert.equal(state.phase, "pot_or_fold");
   assert.equal(state.roundNumber, 2);

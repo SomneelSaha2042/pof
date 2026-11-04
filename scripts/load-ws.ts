@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { isTableHost } from "../shared/game-engine";
 
 type Message = {
   type: string;
@@ -147,37 +148,23 @@ function chooseAction(client: ClientState): { type: string; data?: any } | undef
   const player = state.players?.find((candidate: any) => candidate.id === client.playerId);
   if (!player) return undefined;
 
-  if (state.phase === "lobby") {
-    if (!player.ready) return { type: "player:ready" };
-    if (state.players.length >= 2 && state.players.every((candidate: any) => candidate.ready)) {
-      return { type: "game:start" };
+  if (state.phase === "lobby" || state.phase === "settlement") {
+    if (!player.ready) return { type: "player:ready", data: { roundNumber: state.roundNumber, ante: state.ante } };
+    if (isTableHost(state, client.playerId) && state.players.filter((p: any) => !p.sittingOut && p.connected).every((p: any) => p.ready)) {
+      return { type: state.phase === "lobby" ? "game:start" : "round:new", data: { roundNumber: state.roundNumber } };
     }
     return undefined;
   }
 
-  if (state.phase === "settlement") {
-    return { type: "round:new" };
+  if (state.phase === "side_game" && player.decision === "fold" && !player.sideLocked) {
+    return { type: "side:submit" };
   }
 
-  if (state.phase !== "playing" || state.players[state.turnIdx]?.id !== client.playerId) {
+  if (state.phase !== "pot_or_fold" || state.players[state.turnIdx]?.id !== client.playerId) {
     return undefined;
   }
 
-  if (state.turnStage === "start") {
-    const hand = player.hand ?? [];
-    if (hand.length > 0) {
-      return { type: "turn:drop", data: { drop: { kind: "single", cards: [hand[0]] } } };
-    }
-  }
-
-  if (state.turnStage === "dropped") {
-    if (state.tableDrop?.cards?.length && Math.random() < 0.35) {
-      return { type: "turn:drawFromTable", data: { cardIndex: 0 } };
-    }
-    return { type: "turn:drawDeck" };
-  }
-
-  return undefined;
+  return { type: "turn:decision", data: { decision: Math.random() < 0.5 ? "pot" : "fold" } };
 }
 
 async function setup(): Promise<void> {

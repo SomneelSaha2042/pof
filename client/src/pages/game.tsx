@@ -409,6 +409,8 @@ export default function Game() {
         {showSettlementView && (
           <SettlementView
             gameState={effectiveGameState}
+            playerId={playerId}
+            onToggleReady={toggleReady}
             fourColor={fourColor}
             isSpectator={isSpectator}
             onStartNewRound={startNewRound}

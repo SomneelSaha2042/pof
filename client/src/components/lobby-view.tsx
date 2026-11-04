@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { GameState } from '@shared/game-types';
+import { isTableHost } from '@shared/game-engine';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -50,10 +51,12 @@ export function LobbyView({
 
   const currentPlayer = gameState.players.find((p) => p.id === playerId);
   const isSpectator = !currentPlayer;
+  const isHost = isTableHost(gameState, playerId);
+  const participants = gameState.players.filter(p => !p.sittingOut && p.connected);
   const allReady =
-    gameState.players.length >= 2 && gameState.players.every((p) => p.ready);
+    participants.length >= 2 && participants.every((p) => p.ready);
   const readyCount = gameState.players.filter((p) => p.ready).length;
-  const canStart = gameState.players.length >= 2 && allReady;
+  const canStart = isHost && allReady;
 
   const readyDescriptor =
     readyCount < gameState.players.length
@@ -111,6 +114,7 @@ export function LobbyView({
                 variant="outline"
                 size="sm"
                 onClick={onAddBot}
+                disabled={!isHost}
                 data-testid="button-add-bot"
                 className="border-emerald-400/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 font-mono text-xs font-bold rounded-xl"
               >
@@ -141,6 +145,7 @@ export function LobbyView({
                 <button
                   key={preset}
                   type="button"
+                  disabled={!isHost}
                   onClick={() => {
                     setCustomAnte(preset.toString());
                     onSetAnte(preset);
@@ -159,6 +164,7 @@ export function LobbyView({
               <div className="flex items-center gap-1.5 ml-1">
                 <Input
                   type="number"
+                  disabled={!isHost}
                   min={1}
                   max={10000}
                   value={customAnte}
@@ -171,6 +177,7 @@ export function LobbyView({
                   size="sm"
                   variant="secondary"
                   onClick={handleCustomAnteApply}
+                  disabled={!isHost}
                   className="h-8 px-2.5 font-mono text-xs font-bold"
                 >
                   Set
@@ -258,7 +265,7 @@ export function LobbyView({
                         {isReady && <Check className="h-3 w-3" />}
                         {isReady ? 'Ready' : 'Not Ready'}
                       </div>
-                      {player.isBot && (
+                      {player.isBot && isHost && (
                         <button
                           type="button"
                           onClick={() => onRemoveBot(player.id)}

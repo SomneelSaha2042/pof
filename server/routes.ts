@@ -13,6 +13,8 @@ import {
   FlopDecisionSchema,
   SubmitSideHandSchema,
   GameGetStateSchema,
+  RoundRequestSchema,
+  ReadyRequestSchema,
 } from "@shared/game-types";
 import {
   createGame,
@@ -25,6 +27,7 @@ import {
   checkInvariants,
   togglePlayerReady,
   leaveGame,
+  isTableHost,
 } from "@shared/game-engine";
 import { joinOrReconnectPlayer } from "./room-join";
 import { expireRoomActions } from "./game-deadlines";
@@ -484,11 +487,9 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
 
             try {
               const updatedState = await roomStorage.mutateRoom(socket.roomCode, async (gameState) => {
-                const isSeated = gameState.players.some(
-                  (p) => p.id === socket.playerId && !p.isBot,
-                );
+                const isSeated = isTableHost(gameState, socket.playerId!);
                 if (!isSeated) {
-                  throw new Error("Spectators cannot change the table ante");
+                  throw new Error("Only the table host can change the ante");
                 }
                 return setRoomAnte(gameState, parsed.ante);
               });
@@ -514,11 +515,9 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
             }
             try {
               const updatedState = await roomStorage.mutateRoom(socket.roomCode, async (gameState) => {
-                const isSeated = gameState.players.some(
-                  (p) => p.id === socket.playerId && !p.isBot,
-                );
+                const isSeated = isTableHost(gameState, socket.playerId!);
                 if (!isSeated) {
-                  throw new Error("Spectators cannot add bots");
+                  throw new Error("Only the table host can add bots");
                 }
                 return addBotPlayer(gameState);
               });
@@ -545,11 +544,9 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
             }
             try {
               const updatedState = await roomStorage.mutateRoom(socket.roomCode, async (gameState) => {
-                const isSeated = gameState.players.some(
-                  (p) => p.id === socket.playerId && !p.isBot,
-                );
+                const isSeated = isTableHost(gameState, socket.playerId!);
                 if (!isSeated) {
-                  throw new Error("Spectators cannot remove bots");
+                  throw new Error("Only the table host can remove bots");
                 }
                 return removeBotPlayer(gameState, botId);
               });
@@ -570,8 +567,10 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
               break;
             }
 
+            const parsed = ReadyRequestSchema.parse(message.data);
             try {
               const updatedState = await roomStorage.mutateRoom(socket.roomCode, async (gameState) => {
+                if (parsed.ante !== gameState.ante || parsed.roundNumber !== gameState.roundNumber) throw new Error("Table stakes or round changed; confirm readiness again");
                 const next = togglePlayerReady(gameState, socket.playerId!);
                 if (process.env.NODE_ENV !== "production") {
                   checkInvariants(next);
@@ -601,14 +600,14 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
               break;
             }
 
+            const parsed = RoundRequestSchema.parse(message.data);
             try {
               const updatedState = await roomStorage.mutateRoom(socket.roomCode, async (gameState) => {
-                const isSeated = gameState.players.some(
-                  (p) => p.id === socket.playerId && !p.isBot,
-                );
+                const isSeated = isTableHost(gameState, socket.playerId!);
                 if (!isSeated) {
-                  throw new Error("Spectators cannot start the game");
+                  throw new Error("Only the table host can start the game");
                 }
+                if (gameState.phase !== "lobby" || parsed.roundNumber !== gameState.roundNumber) throw new Error("Stale start request");
                 const next = startRound(gameState);
                 if (process.env.NODE_ENV !== "production") {
                   checkInvariants(next);
@@ -703,14 +702,14 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
               break;
             }
 
+            const parsed = RoundRequestSchema.parse(message.data);
             try {
               const updatedState = await roomStorage.mutateRoom(socket.roomCode, async (gameState) => {
-                const isSeated = gameState.players.some(
-                  (p) => p.id === socket.playerId && !p.isBot,
-                );
+                const isSeated = isTableHost(gameState, socket.playerId!);
                 if (!isSeated) {
-                  throw new Error("Spectators cannot deal the next hand");
+                  throw new Error("Only the table host can deal the next hand");
                 }
+                if (gameState.phase !== "settlement" || parsed.roundNumber !== gameState.roundNumber) throw new Error("Stale next-hand request");
                 const next = startRound(gameState);
                 if (process.env.NODE_ENV !== "production") {
                   checkInvariants(next);

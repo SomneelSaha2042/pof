@@ -848,16 +848,18 @@ export function setRoomAnte(state: GameState, ante: number): GameState {
   if (!Number.isInteger(ante) || ante < 1 || ante > 10000) {
     throw new Error("Ante must be between 1 and 10,000");
   }
+  if (ante === state.ante) return state;
   return {
     ...state,
     ante,
+    players: state.players.map(p => ({ ...p, ready: Boolean(p.isBot) })),
     version: state.version + 1,
   };
 }
 
 export function togglePlayerReady(state: GameState, playerId: string): GameState {
-  if (state.phase !== "lobby") {
-    throw new Error("Cannot change ready state outside lobby");
+  if (state.phase !== "lobby" && state.phase !== "settlement") {
+    throw new Error("Cannot change ready state during a hand");
   }
 
   const idx = state.players.findIndex((p) => p.id === playerId);
@@ -895,7 +897,7 @@ export function startRound(state: GameState): GameState {
   if (participants.length < 2) {
     throw new Error("Need at least 2 players to start");
   }
-  if (state.phase === "lobby" && !participants.every((p) => p.ready)) {
+  if (!participants.every((p) => p.ready)) {
     throw new Error("All players must be ready to start");
   }
 
@@ -1334,6 +1336,7 @@ export function finalizeSettlement(state: GameState): GameState {
       ...p,
       currentHandDelta: handNet,
       chipDelta: p.chipDelta + handNet,
+      ready: Boolean(p.isBot),
     };
   });
 
@@ -1356,6 +1359,10 @@ export function finalizeSettlement(state: GameState): GameState {
     settlement,
     version: state.version + 1,
   };
+}
+
+export function isTableHost(state: GameState, playerId: string): boolean {
+  return state.players.find(p => !p.isBot && !p.sittingOut && p.connected)?.id === playerId;
 }
 
 export function expireGameActions(state: GameState, now = Date.now()): GameState {
