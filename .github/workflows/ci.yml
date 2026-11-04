@@ -26,6 +26,9 @@ jobs:
       - name: TypeScript check
         run: npm run check
 
+      - name: Game and security regression tests
+        run: npm test
+
   build:
     runs-on: ubuntu-latest
     needs: lint-and-typecheck
