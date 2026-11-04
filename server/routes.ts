@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { randomUUID } from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
 import { metrics } from "./metrics";
 import { storage } from "./storage";
@@ -339,7 +340,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           case "room:create": {
             const parsed = CreateRoomSchema.parse(message.data);
             const roomCode = generateRoomCode();
-            const playerId = `player_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+            const playerId = `player_${randomUUID()}`;
 
             const gameState = createGame(
               roomCode,
@@ -371,7 +372,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           case "room:join": {
             const parsed = JoinRoomSchema.parse(message.data);
-            const newPlayerId = `player_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+            const newPlayerId = `player_${randomUUID()}`;
 
             try {
               let playerId = newPlayerId;
@@ -380,6 +381,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   gameState,
                   parsed.playerName,
                   newPlayerId,
+                  parsed.playerId,
                 );
                 playerId = result.playerId;
                 return result.state;
@@ -790,7 +792,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const parsed = CreateRoomSchema.parse(req.body);
       const roomCode = generateRoomCode();
-      const playerId = `player_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+      const playerId = `player_${randomUUID()}`;
 
       const gameState = createGame(
         roomCode,
@@ -820,7 +822,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { roomCode } = req.params;
       const parsed = JoinRoomSchema.parse(req.body);
-      const newPlayerId = `player_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+      const newPlayerId = `player_${randomUUID()}`;
 
       let playerId = newPlayerId;
       const updatedState = await storage.mutateRoom(roomCode, async (gameState) => {
@@ -828,6 +830,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           gameState,
           parsed.playerName,
           newPlayerId,
+          parsed.playerId,
         );
         playerId = result.playerId;
         return result.state;

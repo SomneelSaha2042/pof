@@ -193,8 +193,8 @@ export function useGameSocket(): UseGameSocketReturn {
   );
 
   const joinRoom = useCallback((code: string, playerName: string) => {
-    gameSocket.send('room:join', { roomCode: code, playerName });
-  }, []);
+    gameSocket.send('room:join', { roomCode: code, playerName, playerId: code === roomCode ? playerId ?? undefined : undefined });
+  }, [roomCode, playerId]);
 
   const spectateRoom = useCallback((code: string) => {
     gameSocket.send('room:spectate', { roomCode: code.trim().toUpperCase() });

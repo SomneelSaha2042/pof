@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createGame } from "../shared/game-engine";
 import { joinOrReconnectPlayer } from "./room-join";
 
-test("rejoining a lobby room with the same name reclaims the existing player", () => {
+test("rejoining a seat requires its secret token, even when disconnected", () => {
   const game = createGame("FF-TEST01", "Sam", "player_1");
   const disconnected = {
     ...game,
@@ -13,7 +13,11 @@ test("rejoining a lobby room with the same name reclaims the existing player", (
     })),
   };
 
-  const result = joinOrReconnectPlayer(disconnected, "Sam", "player_2");
+  for (const state of [game, disconnected]) {
+    assert.throws(() => joinOrReconnectPlayer(state, "Sam", "player_2"), /already in the room/);
+    assert.throws(() => joinOrReconnectPlayer(state, "sam", "player_2", "wrong"), /already in the room/);
+  }
+  const result = joinOrReconnectPlayer(disconnected, "Sam", "player_2", "player_1");
 
   assert.equal(result.playerId, "player_1");
   assert.equal(result.rejoined, true);

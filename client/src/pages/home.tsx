@@ -110,7 +110,7 @@ export default function Home() {
             const response = await fetch(`/api/rooms/${code}/join`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ roomCode: code, playerName: name }),
+              body: JSON.stringify({ roomCode: code, playerName: name, playerId: currentRoomCode === code ? localStorage.getItem('furious-five-player-id') ?? undefined : undefined }),
             });
 
             const data = await response.json();

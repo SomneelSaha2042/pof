@@ -11,13 +11,13 @@ export function joinOrReconnectPlayer(
   gameState: GameState,
   playerName: string,
   newPlayerId: string,
+  reconnectToken?: string,
 ): JoinResult {
-  if (gameState.phase !== "lobby") {
-    throw new Error("Game already in progress");
-  }
-
-  const existingPlayer = gameState.players.find((player) => player.name === playerName);
+  const existingPlayer = gameState.players.find((player) => player.name.toLowerCase() === playerName.toLowerCase());
   if (existingPlayer) {
+    if (existingPlayer.isBot || existingPlayer.id !== reconnectToken) {
+      throw new Error("A player with that name is already in the room");
+    }
     const players = gameState.players.map((player) =>
       player.id === existingPlayer.id
         ? {
