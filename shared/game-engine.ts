@@ -714,6 +714,7 @@ export function createGame(
   creatorId: string,
   userId?: string,
   ante = 10,
+  guestId?: string,
 ): GameState {
   const creator: Player = {
     id: creatorId,
@@ -729,6 +730,7 @@ export function createGame(
     sideEvaluation: null,
     sideLocked: false,
     userId,
+    guestId,
   };
 
   return {
@@ -755,6 +757,7 @@ export function joinGame(
   playerName: string,
   playerId: string,
   userId?: string,
+  guestId?: string,
 ): GameState {
   if (state.phase !== "lobby") {
     throw new Error("Game already in progress");
@@ -780,6 +783,7 @@ export function joinGame(
     sideEvaluation: null,
     sideLocked: false,
     userId,
+    guestId,
   };
 
   return {

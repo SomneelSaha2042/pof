@@ -24,6 +24,7 @@ Set these on the Node app service:
 ```text
 NODE_ENV=production
 CORS_ORIGIN=https://your-app.up.railway.app
+SESSION_SECRET=<random secret of at least 32 characters>
 ROOM_TTL_SECONDS=14400
 REDIS_URL=${{Redis.REDIS_URL}}
 DATABASE_URL=${{Postgres.DATABASE_URL}}

@@ -7,8 +7,9 @@ import { metrics } from "./metrics";
 import { registerRoutes } from "./routes";
 import { storage } from "./storage";
 
-const app = express();
 // Default to production for safety if NODE_ENV is not set
+Object.assign(process.env, { NODE_ENV: process.env.NODE_ENV || "production" });
+const app = express();
 const isProduction = process.env.NODE_ENV !== "development";
 
 import { log } from "./logger";

@@ -20,8 +20,10 @@ async function table(t: TestContext) {
     await new Promise<void>(resolve => server.close(() => resolve()));
   });
   const base = `127.0.0.1:${(server.address() as any).port}`;
-  return { rooms, http: `http://${base}`, async connect(origin?: string) {
-    const ws = new WebSocket(`ws://${base}/ws`, origin ? { origin } : undefined);
+  const session = async () => (await fetch(`http://${base}/api/session`)).headers.get("set-cookie")!.split(";")[0];
+  return { rooms, http: `http://${base}`, session, async connect(origin?: string, cookie?: string) {
+    cookie ??= await session();
+    const ws = new WebSocket(`ws://${base}/ws`, { origin, headers: { Cookie: cookie } });
     clients.push(ws);
     await once(ws, "open");
     return ws;
@@ -63,6 +65,50 @@ test("network handlers reject seat theft, non-host stakes, and stale consent", a
   const saved = (await env.rooms.getRoom(created.roomCode))!;
   assert.ok(saved.players.every(p => !p.ready));
   assert.equal((await request(owner, "game:start", { roundNumber: 1 }, "error")).code, "START_FAILED");
+});
+
+test("one browser cannot acquire a second seat through another socket or HTTP", async t => {
+  const env = await table(t);
+  const cookie = await env.session();
+  const owner = await env.connect(undefined, cookie);
+  const created = await request(owner, "room:create", { playerName: "Alice" }, "room:created");
+  const secondTab = await env.connect(undefined, cookie);
+  const secondSeat = await request(secondTab, "room:join", { roomCode: created.roomCode, playerName: "Other name" }, "error");
+  assert.match(secondSeat.message, /already has a seat/);
+  const httpSeat = await fetch(`${env.http}/api/rooms/${created.roomCode}/join`, { method: "POST", headers: { "Content-Type": "application/json", Cookie: cookie }, body: JSON.stringify({ roomCode: created.roomCode, playerName: "Another name" }) });
+  assert.equal(httpSeat.status, 400);
+  assert.equal((await env.rooms.getRoom(created.roomCode))!.players.length, 1);
+  await request(secondTab, "game:getState", created, "state:update", state => state.players.some((p: any) => p.id === created.playerId));
+  const saved = (await env.rooms.getRoom(created.roomCode))!;
+  assert.ok(saved.players[0].guestId);
+  const view = await fetch(`${env.http}/api/rooms/${created.roomCode}?playerId=${created.playerId}`, { headers: { Cookie: cookie } }).then(r => r.json());
+  assert.equal(view.gameState.players[0].guestId, undefined);
+  const outsider = await env.connect();
+  assert.equal((await request(outsider, "game:getState", created, "error")).code, "SESSION_MISMATCH");
+});
+
+test("only the owning browser sees its cards and active hands reject network redeals", async t => {
+  const env = await table(t);
+  const cookie = await env.session();
+  const owner = await env.connect(undefined, cookie);
+  const created = await request(owner, "room:create", { playerName: "Alice" }, "room:created");
+  const guest = await env.connect();
+  const joined = await request(guest, "room:join", { roomCode: created.roomCode, playerName: "Bob" }, "room:joined");
+  await request(owner, "player:ready", { roundNumber: 1, ante: 10 }, "state:update", s => s.players.find((p: any) => p.id === created.playerId)?.ready);
+  await request(guest, "player:ready", { roundNumber: 1, ante: 10 }, "state:update", s => s.players.every((p: any) => p.ready));
+  await request(owner, "game:start", { roundNumber: 1 }, "state:update", s => s.phase === "pot_or_fold");
+  await request(owner, "turn:decision", { decision: "pot" }, "state:update", s => s.mainPot === 40);
+  const before = structuredClone(await env.rooms.getRoom(created.roomCode));
+  assert.equal((await request(owner, "round:new", { roundNumber: 1 }, "error")).code, "NEW_ROUND_FAILED");
+  assert.equal((await request(owner, "game:start", { roundNumber: 1 }, "error")).code, "START_FAILED");
+  assert.deepEqual(await env.rooms.getRoom(created.roomCode), before);
+  const path = `${env.http}/api/rooms/${created.roomCode}?playerId=${created.playerId}`;
+  const own = await fetch(path, { headers: { Cookie: cookie } }).then(r => r.json());
+  assert.ok(own.gameState.players[0].hand.every((c: any) => c !== null));
+  const outsider = await fetch(path).then(r => r.json());
+  assert.ok(outsider.gameState.players.every((p: any) => p.hand.every((c: any) => c === null)));
+  assert.equal(JSON.stringify(own).includes(before!.players[0].guestId!), false);
+  assert.notEqual(joined.playerId, created.playerId);
 });
 
 test("WebSocket upgrades reject foreign origins and oversized messages", async t => {

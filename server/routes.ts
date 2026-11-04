@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
 import { metrics } from "./metrics";
 import { storage } from "./storage";
@@ -32,6 +32,7 @@ import {
 import { joinOrReconnectPlayer } from "./room-join";
 import { expireRoomActions } from "./game-deadlines";
 import { requestLimit } from "./request-limit";
+import { guestSessions } from "./guest-session";
 
 interface ExtendedWebSocket extends WebSocket {
   playerId?: string;
@@ -44,6 +45,7 @@ interface ExtendedWebSocket extends WebSocket {
   clientAddress?: string;
   pendingMessages?: number;
   messageQueue?: Promise<void>;
+  guestId?: string;
 }
 
 interface SocketMessage {
@@ -85,7 +87,7 @@ export function redactGameStateForPlayer(
   const potPlayersCount = state.players.filter((p) => p.decision === "pot").length;
   const foldPlayersCount = state.players.filter((p) => p.decision === "fold").length;
 
-  const redactedPlayers = state.players.map((player) => {
+  const redactedPlayers = state.players.map(({ guestId: _guestId, ...player }) => {
     const publicId = mapId(player.id);
 
     // Viewer always sees their own cards
@@ -175,6 +177,13 @@ export function redactGameStateForPlayer(
 }
 
 export async function registerRoutes(app: Express, roomStorage: IStorage = storage): Promise<Server> {
+  if (process.env.NODE_ENV === "production" && (process.env.SESSION_SECRET || "").length < 32) throw new Error("SESSION_SECRET must contain at least 32 characters in production to preserve browser identities across restarts");
+  const sessions = guestSessions(process.env.SESSION_SECRET || randomBytes(32).toString("hex"));
+  app.use((req, res, next) => {
+    res.locals.guestId = sessions.resolve(req.headers.cookie, res);
+    next();
+  });
+  app.get("/api/session", (_req, res) => res.sendStatus(204));
   const httpServer = createServer(app);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 });
   const roomConnections = new Map<string, Set<ExtendedWebSocket>>();
@@ -209,6 +218,10 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
     }
     if (request.headers.origin && !allowedOrigins.includes(request.headers.origin)) {
       socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+      return;
+    }
+    if (!sessions.read(request.headers.cookie)) {
+      socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
       return;
     }
     const address = request.socket.remoteAddress || "unknown";
@@ -353,6 +366,7 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
 
   wss.on("connection", (socket: ExtendedWebSocket, request) => {
     socket.clientAddress = request.socket.remoteAddress || "unknown";
+    socket.guestId = sessions.read(request.headers.cookie);
     updateActiveSocketMetric();
     socket.lastPing = Date.now();
 
@@ -417,6 +431,7 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
               playerId,
               undefined,
               parsed.ante ?? 10,
+              socket.guestId,
             );
             await createRoom(gameState, socket.clientAddress!);
             metrics.incrementRoomsCreated();
@@ -451,6 +466,7 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
                   parsed.playerName,
                   newPlayerId,
                   parsed.playerId,
+                  socket.guestId,
                 );
                 playerId = result.playerId;
                 return result.state;
@@ -785,6 +801,16 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
                 (p) => p.id === playerId && !p.isBot,
               );
               if (player) {
+                if (player.guestId && player.guestId !== socket.guestId) {
+                  sendError(socket, "SESSION_MISMATCH", "This seat belongs to another browser session");
+                  break;
+                }
+                if (!player.guestId) {
+                  gameState = await roomStorage.mutateRoom(roomCode, state => {
+                    if (state.players.some(p => p.id !== playerId && p.guestId === socket.guestId)) throw new Error("This browser already has a seat at this table");
+                    return { ...state, players: state.players.map(p => p.id === playerId ? { ...p, guestId: socket.guestId } : p), version: state.version + 1 };
+                  });
+                }
                 socket.playerId = playerId;
                 socket.roomCode = roomCode;
                 socket.playerName = player.name;
@@ -896,6 +922,7 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
         playerId,
         undefined,
         parsed.ante ?? 10,
+        res.locals.guestId,
       );
       await createRoom(gameState, req.socket.remoteAddress || "unknown");
       metrics.incrementRoomsCreated();
@@ -927,6 +954,7 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
           parsed.playerName,
           newPlayerId,
           parsed.playerId,
+          res.locals.guestId,
         );
         playerId = result.playerId;
         return result.state;
@@ -967,9 +995,11 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
         });
       }
 
+      const viewer = gameState.players.find(p => p.id === playerId && !p.isBot);
+      const viewerId = viewer && (!viewer.guestId || viewer.guestId === res.locals.guestId) ? viewer.id : "";
       res.json({
         success: true,
-        gameState: redactGameStateForPlayer(gameState, typeof playerId === "string" ? playerId : ""),
+        gameState: redactGameStateForPlayer(gameState, viewerId),
       });
     } catch (error) {
       res.status(500).json({

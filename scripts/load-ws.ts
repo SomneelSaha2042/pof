@@ -34,6 +34,7 @@ const maxActionMs = Number(args.get("maxActionMs") ?? process.env.MAX_ACTION_MS 
 
 const clients: ClientState[] = [];
 const latencies: number[] = [];
+const completedRounds = new Set<string>();
 let errors = 0;
 let disconnects = 0;
 let messagesSent = 0;
@@ -81,13 +82,18 @@ function waitForMessage(client: ClientState, type: string, timeoutMs = 10000): P
   });
 }
 
-function connectClient(id: number, roomIndex: number): Promise<ClientState> {
+async function connectClient(id: number, roomIndex: number): Promise<ClientState> {
+  const sessionUrl = new URL(targetUrl);
+  sessionUrl.protocol = sessionUrl.protocol === "wss:" ? "https:" : "http:";
+  sessionUrl.pathname = "/api/session";
+  const cookie = (await fetch(sessionUrl)).headers.get("set-cookie")?.split(";")[0];
+  if (!cookie) throw new Error("Could not establish load-client guest session");
   return new Promise((resolve, reject) => {
     const client: ClientState = {
       id,
       roomIndex,
       name: `LoadUser_${id}`,
-      ws: new WebSocket(targetUrl),
+      ws: new WebSocket(targetUrl, { headers: { Cookie: cookie } }),
     };
 
     const timer = setTimeout(() => reject(new Error(`Client ${id} connect timeout`)), 10000);
@@ -104,6 +110,7 @@ function connectClient(id: number, roomIndex: number): Promise<ClientState> {
         const message = JSON.parse(raw.toString()) as Message;
         if (message.type === "state:update") {
           client.latestState = message.data;
+          if (message.data.phase === "settlement") completedRounds.add(`${message.data.roomCode}:${message.data.roundNumber}`);
           if (client.pendingActionAt) {
             latencies.push(Date.now() - client.pendingActionAt);
             client.pendingActionAt = undefined;
@@ -223,6 +230,7 @@ async function main(): Promise<void> {
     playersPerRoom,
     messagesSent,
     messagesReceived,
+    completedRounds: completedRounds.size,
     errors,
     disconnects,
     latency: {
@@ -232,6 +240,7 @@ async function main(): Promise<void> {
       max: latencies.length ? Math.max(...latencies) : 0,
     },
   }, null, 2));
+  if (completedRounds.size < roomCount) throw new Error("Load test did not complete at least one hand per room");
 }
 
 main().catch((error) => {

@@ -12,10 +12,14 @@ export function joinOrReconnectPlayer(
   playerName: string,
   newPlayerId: string,
   reconnectToken?: string,
+  guestId?: string,
 ): JoinResult {
+  if (guestId && gameState.players.some(player => player.guestId === guestId && player.name.toLowerCase() !== playerName.toLowerCase())) {
+    throw new Error("This browser already has a seat at this table");
+  }
   const existingPlayer = gameState.players.find((player) => player.name.toLowerCase() === playerName.toLowerCase());
   if (existingPlayer) {
-    if (existingPlayer.isBot || existingPlayer.id !== reconnectToken) {
+    if (existingPlayer.isBot || existingPlayer.id !== reconnectToken || (existingPlayer.guestId && existingPlayer.guestId !== guestId)) {
       throw new Error("A player with that name is already in the room");
     }
     const players = gameState.players.map((player) =>
@@ -23,6 +27,7 @@ export function joinOrReconnectPlayer(
         ? {
             ...player,
             connected: true,
+            guestId,
           }
         : player,
     );
@@ -39,7 +44,7 @@ export function joinOrReconnectPlayer(
   }
 
   return {
-    state: joinGame(gameState, playerName, newPlayerId),
+    state: joinGame(gameState, playerName, newPlayerId, undefined, guestId),
     playerId: newPlayerId,
     rejoined: false,
   };

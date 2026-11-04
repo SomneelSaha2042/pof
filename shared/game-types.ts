@@ -73,6 +73,7 @@ export interface Player {
   sideEvaluation?: SideHandEvaluation | null;
   sideLocked: boolean;
   userId?: string;
+  guestId?: string;
 }
 
 export interface MainPotResult {
