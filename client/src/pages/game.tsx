@@ -375,6 +375,12 @@ export default function Game() {
 
       {/* Main Content */}
       <main className="flex-1 w-full max-w-[1360px] mx-auto px-3 sm:px-6 py-5">
+        {effectiveGameState.actionDeadline && (
+          <p role="status" className="mb-3 text-center text-sm text-amber-300">
+            {effectiveGameState.phase === 'pot_or_fold' ? 'Automatic fold' : 'Automatic side-hand lock'} at{' '}
+            {new Date(effectiveGameState.actionDeadline).toLocaleTimeString()}.
+          </p>
+        )}
         {isLobby && (
           <LobbyView
             gameState={effectiveGameState}

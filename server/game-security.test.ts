@@ -2,6 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createGame, joinGame, togglePlayerReady, startRound, applyFlopDecision, addBotPlayer, computeBestSideArrangement, evaluateSideArrangement, compareSideHands1v1 } from "../shared/game-engine";
 import { redactGameStateForPlayer } from "./routes";
+import { expireGameActions, leaveGame } from "../shared/game-engine";
+import { expireRoomActions } from "./game-deadlines";
+import { MemStorage } from "./storage/mem-storage";
 
 function readyGame() {
   let state = joinGame(createGame("POF-SECURITY", "Alice", "alice"), "Bob", "bob");
@@ -18,6 +21,54 @@ test("an active hand cannot be redealt or lose outstanding contributions", () =>
   const sideGame = applyFlopDecision(applyFlopDecision(startRound(readyGame()), "alice", "fold"), "bob", "fold");
   assert.equal(sideGame.phase, "side_game");
   assert.throws(() => startRound(sideGame), /unfinished hand/);
+});
+
+test("server deadlines fold idle players, lock side hands, and survive serialization", () => {
+  let state = startRound(readyGame());
+  state = JSON.parse(JSON.stringify(state));
+  state = expireGameActions(state, state.actionDeadline!);
+  assert.equal(state.players[0].decision, "fold");
+  assert.equal(state.turnIdx, 1);
+  state = expireGameActions(state, state.actionDeadline!);
+  assert.equal(state.phase, "side_game");
+  state = expireGameActions(state, state.actionDeadline!);
+  assert.equal(state.phase, "settlement");
+  assert.ok(state.players.every(p => p.sideLocked));
+  assert.equal(state.carryoverPot, 20);
+});
+
+test("the deadline worker persists automatic actions without any player connections", async () => {
+  const rooms = new MemStorage();
+  const state = startRound(readyGame());
+  await rooms.createRoom(state);
+  const published: string[] = [];
+  await expireRoomActions(rooms, state => published.push(state.players[0].decision), state.actionDeadline! - 1);
+  assert.deepEqual(published, []);
+  await expireRoomActions(rooms, state => published.push(state.players[0].decision), state.actionDeadline!);
+  assert.deepEqual(published, ["fold"]);
+  assert.equal((await rooms.getRoom(state.roomCode))!.turnIdx, 1);
+});
+
+test("late player decisions cannot beat the deadline worker", () => {
+  const state = { ...startRound(readyGame()), actionDeadline: Date.now() - 1 };
+  assert.throws(() => applyFlopDecision(state, "alice", "pot"), /deadline/);
+});
+
+test("leaving settles the current obligation but excludes a seat from future antes", () => {
+  let state = joinGame(readyGame(), "Charlie", "charlie");
+  state = togglePlayerReady(state, "charlie");
+  state = leaveGame(startRound(state), "alice");
+  assert.equal(state.players[0].decision, "fold");
+  assert.equal(state.players[0].potContribution, 10);
+  state = applyFlopDecision(state, "bob", "pot");
+  state = applyFlopDecision(state, "charlie", "pot");
+  assert.equal(state.phase, "settlement");
+  const total = state.players.reduce((sum, p) => sum + p.chipDelta, 0);
+  assert.equal(total, 0);
+  state = startRound(state);
+  assert.equal(state.players[0].potContribution, 0);
+  assert.equal(state.players[0].hand.length, 0);
+  assert.equal(state.mainPot, 20);
 });
 
 test("three wild threes complete Quads and receive the 7x payout", () => {

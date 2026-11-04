@@ -27,6 +27,12 @@
   - **Normal (2x)**: Must strictly win **both** 2-card boards against the opponent to win 2x, otherwise Push.
 
 ## Local Development
+Players have 30 seconds to choose POT or FOLD. The server automatically folds an
+idle player. Side hands automatically lock after 60 seconds. These deadlines are
+saved with room state and continue after reconnecting or restarting the server.
+Leaving keeps the player's current-hand obligations and sits them out of future
+hands; their accumulated result remains at the table.
+
 
 ```bash
 npm install

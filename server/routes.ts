@@ -24,8 +24,10 @@ import {
   removeBotPlayer,
   checkInvariants,
   togglePlayerReady,
+  leaveGame,
 } from "@shared/game-engine";
 import { joinOrReconnectPlayer } from "./room-join";
+import { expireRoomActions } from "./game-deadlines";
 
 interface ExtendedWebSocket extends WebSocket {
   playerId?: string;
@@ -236,6 +238,12 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
   }
 
   function addSocketToRoom(socket: ExtendedWebSocket, roomCode: string): void {
+    for (const [code, connections] of Array.from(roomConnections)) {
+      if (code !== roomCode) {
+        connections.delete(socket);
+        if (connections.size === 0) roomConnections.delete(code);
+      }
+    }
     if (!roomConnections.has(roomCode)) {
       roomConnections.set(roomCode, new Set());
     }
@@ -293,9 +301,12 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
 
     socket.disconnectTimer = setTimeout(async () => {
       if (socket.roomCode && socket.playerId) {
+        const isStillConnected = Array.from(roomConnections.get(socket.roomCode) ?? []).some(other => other !== socket && other.playerId === socket.playerId && other.readyState === WebSocket.OPEN);
+        if (isStillConnected) return;
         await updatePlayerConnection(socket.roomCode, socket.playerId, false);
       }
     }, 120000);
+    socket.disconnectTimer.unref();
   }
 
   function cancelDisconnect(socket: ExtendedWebSocket): void {
@@ -334,6 +345,25 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
         cancelDisconnect(socket);
 
         switch (message.type) {
+          case "room:leave": {
+            if (socket.roomCode && socket.playerId) {
+              const roomCode = socket.roomCode;
+              const state = await roomStorage.getRoom(roomCode);
+              if (state?.players.some(p => p.id === socket.playerId && !p.isBot)) {
+                const next = await roomStorage.mutateRoom(roomCode, current => leaveGame(current, socket.playerId!));
+                broadcastToRoom(roomCode, { type: "state:update", data: next }, socket);
+              }
+              const connections = roomConnections.get(roomCode);
+              connections?.delete(socket);
+              if (connections?.size === 0) roomConnections.delete(roomCode);
+              cancelDisconnect(socket);
+              socket.roomCode = undefined;
+              socket.playerId = undefined;
+              socket.playerName = undefined;
+            }
+            sendToSocket(socket, { type: "room:left", data: {} });
+            break;
+          }
           case "ping": {
             sendToSocket(socket, { type: "pong", data: {} });
             break;
@@ -762,6 +792,7 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
         const connections = roomConnections.get(socket.roomCode);
         if (connections) {
           connections.delete(socket);
+          if (connections.size === 0) roomConnections.delete(socket.roomCode);
         }
 
         scheduleDisconnect(socket);
@@ -789,8 +820,21 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
       });
     });
   }, 10000);
+  let expiring = false;
+  const deadlines = setInterval(async () => {
+    if (expiring) return;
+    expiring = true;
+    try {
+      await expireRoomActions(roomStorage, state => broadcastToRoom(state.roomCode, { type: "state:update", data: state }));
+    } catch (error) {
+      console.error("Error advancing game deadlines:", error);
+    } finally {
+      expiring = false;
+    }
+  }, 1000);
   httpServer.on("close", () => {
     clearInterval(heartbeat);
+    clearInterval(deadlines);
     wss.close();
   });
 

@@ -239,6 +239,7 @@ export function useGameSocket(): UseGameSocketReturn {
   }, [roomCode, playerId]);
 
   const clearRoom = useCallback(() => {
+    gameSocket.send('room:leave');
     localStorage.removeItem('furious-five-room-code');
     localStorage.removeItem('furious-five-player-id');
     setRoomCode(null);

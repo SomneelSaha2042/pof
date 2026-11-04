@@ -15,6 +15,8 @@ import type {
 
 export const SUITS: Suit[] = ["C", "D", "H", "S"];
 export const RANKS: Rank[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+export const TURN_TIMEOUT_MS = 30_000;
+export const SIDE_TIMEOUT_MS = 60_000;
 
 export function pokerRank(r: Rank): number {
   return r === 1 ? 14 : r;
@@ -867,6 +869,7 @@ export function togglePlayerReady(state: GameState, playerId: string): GameState
   updatedPlayers[idx] = {
     ...updatedPlayers[idx],
     ready: !updatedPlayers[idx].ready,
+    sittingOut: false,
   };
 
   return {
@@ -888,25 +891,31 @@ export function startRound(state: GameState): GameState {
   if (state.phase !== "lobby" && state.phase !== "settlement") {
     throw new Error("Cannot redeal an unfinished hand");
   }
-  if (state.players.length < 2) {
+  const participants = state.players.filter(p => !p.sittingOut && p.connected);
+  if (participants.length < 2) {
     throw new Error("Need at least 2 players to start");
   }
-  if (state.phase === "lobby" && !state.players.every((p) => p.ready)) {
+  if (state.phase === "lobby" && !participants.every((p) => p.ready)) {
     throw new Error("All players must be ready to start");
   }
 
   const deck = createDeck();
   const numPlayers = state.players.length;
   const nextRoundNumber = state.phase === "lobby" ? 1 : state.roundNumber + 1;
-  const buttonIdx =
-    state.phase === "lobby" ? 0 : (state.buttonIdx + 1) % numPlayers;
+  let buttonIdx = state.phase === "lobby" ? 0 : (state.buttonIdx + 1) % numPlayers;
+  while (!state.players[buttonIdx].connected || state.players[buttonIdx].sittingOut) {
+    buttonIdx = (buttonIdx + 1) % numPlayers;
+  }
 
   const ante = state.ante;
-  const anteTotal = numPlayers * ante;
+  const anteTotal = participants.length * ante;
   const initialPot = state.carryoverPot + anteTotal;
 
   let deckCursor = 0;
   const players: Player[] = state.players.map((p) => {
+    if (!p.connected || p.sittingOut) {
+      return { ...p, sittingOut: true, ready: false, hand: [], currentHandDelta: 0, potContribution: 0, decision: "pending", sideArrangement: null, sideEvaluation: null, sideLocked: false };
+    }
     const hand = sortCardsForDisplay(deck.slice(deckCursor, deckCursor + 5));
     deckCursor += 5;
     return {
@@ -939,6 +948,7 @@ export function startRound(state: GameState): GameState {
     deck: remainingDeck,
     settlement: null,
     roundNumber: nextRoundNumber,
+    actionDeadline: Date.now() + TURN_TIMEOUT_MS,
     version: state.version + 1,
   };
 
@@ -976,13 +986,13 @@ function advanceBotsIfNeeded(state: GameState): GameState {
   let safety = 0;
   while (
     curr.phase === "pot_or_fold" &&
-    curr.players[curr.turnIdx]?.isBot &&
+    (curr.players[curr.turnIdx]?.isBot || curr.players[curr.turnIdx]?.sittingOut || !curr.players[curr.turnIdx]?.connected) &&
     curr.players[curr.turnIdx]?.decision === "pending" &&
     safety < 16
   ) {
     safety++;
     const bot = curr.players[curr.turnIdx];
-    const decision = chooseBotFlopDecision(bot, curr.communityCards);
+    const decision = bot.isBot && !bot.sittingOut ? chooseBotFlopDecision(bot, curr.communityCards) : "fold";
     curr = applyFlopDecisionInternal(curr, bot.id, decision);
   }
   return curr;
@@ -993,6 +1003,9 @@ export function applyFlopDecision(
   playerId: string,
   decision: "pot" | "fold",
 ): GameState {
+  if (state.actionDeadline && Date.now() >= state.actionDeadline) {
+    throw new Error("Turn deadline has expired");
+  }
   let next = applyFlopDecisionInternal(state, playerId, decision);
   next = advanceBotsIfNeeded(next);
   return next;
@@ -1032,7 +1045,7 @@ function applyFlopDecisionInternal(
   let nextTurnIdx = -1;
   for (let offset = 1; offset <= numPlayers; offset++) {
     const candidateIdx = (state.turnIdx + offset) % numPlayers;
-    if (updatedPlayers[candidateIdx].decision === "pending") {
+    if (updatedPlayers[candidateIdx].decision === "pending" && updatedPlayers[candidateIdx].hand.length === 5) {
       nextTurnIdx = candidateIdx;
       break;
     }
@@ -1043,6 +1056,7 @@ function applyFlopDecisionInternal(
     players: updatedPlayers,
     mainPot: updatedMainPot,
     turnIdx: nextTurnIdx !== -1 ? nextTurnIdx : state.turnIdx,
+    actionDeadline: Date.now() + TURN_TIMEOUT_MS,
     version: state.version + 1,
   };
 
@@ -1078,7 +1092,7 @@ function transitionAfterAllFlopDecisions(state: GameState): GameState {
       sideArrangement: bestSide.arrangement,
       sideEvaluation: bestSide,
       // Bots automatically lock in their optimal side hand
-      sideLocked: Boolean(p.isBot),
+      sideLocked: Boolean(p.isBot || p.sittingOut || !p.connected),
     };
   });
 
@@ -1099,6 +1113,7 @@ function transitionAfterAllFlopDecisions(state: GameState): GameState {
       return {
         ...nextState,
         phase: "side_game",
+        actionDeadline: Date.now() + SIDE_TIMEOUT_MS,
         version: state.version + 1,
       };
     }
@@ -1118,6 +1133,9 @@ export function submitSideHand(
 ): GameState {
   if (state.phase !== "side_game") {
     throw new Error("Not in Side Game phase");
+  }
+  if (state.actionDeadline && Date.now() >= state.actionDeadline) {
+    throw new Error("Side game deadline has expired");
   }
 
   const idx = state.players.findIndex((p) => p.id === playerId);
@@ -1332,11 +1350,37 @@ export function finalizeSettlement(state: GameState): GameState {
   return {
     ...state,
     phase: "settlement",
+    actionDeadline: null,
     players: updatedPlayers,
     carryoverPot: nextCarryoverPot,
     settlement,
     version: state.version + 1,
   };
+}
+
+export function expireGameActions(state: GameState, now = Date.now()): GameState {
+  if (state.phase !== "pot_or_fold" && state.phase !== "side_game") return state;
+  // Rooms saved before deadlines were introduced receive one recovery window.
+  if (!state.actionDeadline) {
+    return { ...state, actionDeadline: now + (state.phase === "pot_or_fold" ? TURN_TIMEOUT_MS : SIDE_TIMEOUT_MS), version: state.version + 1 };
+  }
+  if (now < state.actionDeadline) return state;
+  if (state.phase === "pot_or_fold") {
+    return advanceBotsIfNeeded(applyFlopDecisionInternal(state, state.players[state.turnIdx].id, "fold"));
+  }
+  return finalizeSettlement({ ...state, players: state.players.map(p => p.decision === "fold" ? { ...p, sideLocked: true } : p) });
+}
+
+export function leaveGame(state: GameState, playerId: string): GameState {
+  const player = state.players.find(p => p.id === playerId && !p.isBot);
+  if (!player) throw new Error("Player not found");
+  let next: GameState = { ...state, version: state.version + 1, players: state.players.map(p => p.id === playerId ? { ...p, connected: false, sittingOut: true, ready: false } : p) };
+  if (next.phase === "pot_or_fold") next = advanceBotsIfNeeded(next);
+  if (next.phase === "side_game") {
+    next = { ...next, players: next.players.map(p => p.id === playerId && p.decision === "fold" ? { ...p, sideLocked: true } : p) };
+    if (next.players.filter(p => p.decision === "fold").every(p => p.sideLocked)) next = finalizeSettlement(next);
+  }
+  return next;
 }
 
 export function checkInvariants(state: GameState): void {
@@ -1345,7 +1389,7 @@ export function checkInvariants(state: GameState): void {
   }
   if (state.phase === "pot_or_fold" || state.phase === "side_game") {
     for (const p of state.players) {
-      if (p.hand.length !== 5) {
+      if (!p.sittingOut && p.hand.length !== 5) {
         throw new Error(`Invariant failed: player ${p.name} does not have 5 cards`);
       }
     }

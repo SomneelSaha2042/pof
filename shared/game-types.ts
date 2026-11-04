@@ -63,6 +63,7 @@ export interface Player {
   connected: boolean;
   ready: boolean;
   isBot?: boolean;
+  sittingOut?: boolean;
   hand: (Card | null)[];
   chipDelta: number; // cumulative net chips across all hands
   currentHandDelta: number; // net chips won/lost in the current hand
@@ -119,6 +120,7 @@ export interface GameState {
   version: number;
   roundNumber: number;
   gameStartTime: number;
+  actionDeadline?: number | null;
 }
 
 // Zod schemas for validation
@@ -191,6 +193,7 @@ export const GameStateSchema = z.object({
   version: z.number(),
   roundNumber: z.number(),
   gameStartTime: z.number(),
+  actionDeadline: z.number().nullable().optional(),
 });
 
 export const ErrorSchema = z.object({
