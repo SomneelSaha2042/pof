@@ -7,6 +7,38 @@ import { registerRoutes } from "./routes";
 import { MemStorage } from "./storage/mem-storage";
 import { createGame, addBotPlayer, togglePlayerReady, startRound } from "../shared/game-engine";
 
+test("production starts without SESSION_SECRET and keeps its signing key across server restarts", async t => {
+  const previousMode = process.env.NODE_ENV;
+  const previousSecret = process.env.SESSION_SECRET;
+  process.env.NODE_ENV = "production";
+  delete process.env.SESSION_SECRET;
+  t.after(() => {
+    if (previousMode === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previousMode;
+    if (previousSecret === undefined) delete process.env.SESSION_SECRET; else process.env.SESSION_SECRET = previousSecret;
+  });
+  const rooms = new MemStorage();
+  let cookie: string | undefined;
+  for (let restart = 0; restart < 2; restart++) {
+    const app = express();
+    const server = await registerRoutes(app, rooms);
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    try {
+      const response = await fetch(`http://127.0.0.1:${(server.address() as any).port}/api/session`, { headers: cookie ? { Cookie: cookie } : {} });
+      assert.equal(response.status, 204);
+      const issued = response.headers.get("set-cookie");
+      if (cookie) assert.equal(issued, null, "Restart must continue accepting the existing signed cookie");
+      else {
+        assert.match(issued!, /HttpOnly/);
+        assert.match(issued!, /Secure/);
+        cookie = issued!.split(";")[0];
+      }
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  }
+});
+
 async function table(t: TestContext) {
   const rooms = new MemStorage();
   const app = express();

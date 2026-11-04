@@ -24,13 +24,19 @@ Set these on the Node app service:
 ```text
 NODE_ENV=production
 CORS_ORIGIN=https://your-app.up.railway.app
-SESSION_SECRET=<random secret of at least 32 characters>
 ROOM_TTL_SECONDS=14400
 REDIS_URL=${{Redis.REDIS_URL}}
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 ```
 
 After adding a custom domain, replace `CORS_ORIGIN` with the custom HTTPS origin. Do not leave `CORS_ORIGIN=*` for production.
+`SESSION_SECRET` is optional. Without it, the app generates a cryptographic signing
+key once and stores it in Redis at `pof:session-secret`, without an expiry. Keep
+Redis persistent so browser identities survive deployments. An explicit override
+must contain at least 32 characters and must remain stable across deployments.
+Shorter configured values are ignored with a warning; the secure stored key is used.
+Switching an existing deployment from an explicit secret to the generated key
+invalidates its old browser cookies; retain the explicit secret if already in use.
 Comma-separated origins are supported. WebSocket upgrades check the same explicit
 origins; native CLI clients may omit Origin. The server limits messages to 16 KiB,
 pending messages to 8 per connection, connections to 1,000 total and 120 per

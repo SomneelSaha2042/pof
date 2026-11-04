@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { randomUUID, randomBytes } from "crypto";
 import { createClient, type RedisClientType } from "redis";
 import { GameStateSchema, type GameState } from "@shared/game-types";
 import type { IStorage, StorageStatus } from "./types";
@@ -59,6 +59,15 @@ export class RedisStorage implements IStorage {
       redis: this.status,
       lastRedisError: this.lastError,
     };
+  }
+
+  async getSessionSecret(): Promise<string> {
+    const redis = await this.getClient();
+    // No TTL: the signing key must outlive rooms and survive app deployments.
+    await redis.set("pof:session-secret", randomBytes(32).toString("hex"), { NX: true });
+    const secret = await redis.get("pof:session-secret");
+    if (!secret || secret.length < 32) throw new Error("Stored session signing key is invalid");
+    return secret;
   }
 
   async createRoom(gameState: GameState): Promise<string> {

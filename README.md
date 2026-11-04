@@ -28,9 +28,11 @@
 
 ## Local Development
 Guest seats are tied to a signed, HttpOnly browser cookie. A second tab using the
-same cookie cannot take another seat at the same table. Set `SESSION_SECRET` to
-a random secret of at least 32 characters in production and retain it across
-deployments. Native CLI players must retain their setup `cookie` and set
+same cookie cannot take another seat at the same table. Without `SESSION_SECRET`,
+the app generates a key and retains it in Redis across deployments. An optional
+explicit `SESSION_SECRET` must contain at least 32 characters and remain stable.
+Without Redis, the key lasts as long as the in-memory rooms. Native CLI players
+must retain their setup `cookie` and set
 `POF_GUEST_COOKIE` when resuming that seat.
 
 Guest identity does not prove a unique person: clearing cookies, incognito,

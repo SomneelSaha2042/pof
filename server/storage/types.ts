@@ -1,6 +1,7 @@
 import type { GameState } from "@shared/game-types";
 
 export interface IStorage {
+  getSessionSecret(): Promise<string>;
   createRoom(gameState: GameState): Promise<string>;
   getRoom(roomCode: string): Promise<GameState | undefined>;
   updateRoom(roomCode: string, gameState: GameState): Promise<void>;

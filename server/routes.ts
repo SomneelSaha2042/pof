@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { randomUUID, randomBytes } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
 import { metrics } from "./metrics";
 import { storage } from "./storage";
@@ -32,7 +32,7 @@ import {
 import { joinOrReconnectPlayer } from "./room-join";
 import { expireRoomActions } from "./game-deadlines";
 import { requestLimit } from "./request-limit";
-import { guestSessions } from "./guest-session";
+import { guestSessions, sessionSecretFor } from "./guest-session";
 
 interface ExtendedWebSocket extends WebSocket {
   playerId?: string;
@@ -177,8 +177,7 @@ export function redactGameStateForPlayer(
 }
 
 export async function registerRoutes(app: Express, roomStorage: IStorage = storage): Promise<Server> {
-  if (process.env.NODE_ENV === "production" && (process.env.SESSION_SECRET || "").length < 32) throw new Error("SESSION_SECRET must contain at least 32 characters in production to preserve browser identities across restarts");
-  const sessions = guestSessions(process.env.SESSION_SECRET || randomBytes(32).toString("hex"));
+  const sessions = guestSessions(await sessionSecretFor(roomStorage));
   app.use((req, res, next) => {
     res.locals.guestId = sessions.resolve(req.headers.cookie, res);
     next();

@@ -1,5 +1,12 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Response } from "express";
+import type { IStorage } from "./storage/types";
+
+export async function sessionSecretFor(rooms: IStorage, configured = process.env.SESSION_SECRET): Promise<string> {
+  if (configured && configured.length >= 32) return configured;
+  if (configured) console.warn("SESSION_SECRET is shorter than 32 characters; using the storage-backed signing key");
+  return rooms.getSessionSecret();
+}
 
 export function guestSessions(secret: string) {
   // shortcut: cookies identify a browser, require verified sign-in before competitive play.

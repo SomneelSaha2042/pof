@@ -1,7 +1,9 @@
 import type { GameState } from "@shared/game-types";
+import { randomBytes } from "node:crypto";
 import type { IStorage } from "./types";
 
 export class MemStorage implements IStorage {
+  private sessionSecret = randomBytes(32).toString("hex");
   private rooms: Map<string, GameState>;
   private lastActivity: Map<string, number>;
   private roomQueues = new Map<string, Promise<void>>();
@@ -13,6 +15,10 @@ export class MemStorage implements IStorage {
     setInterval(() => {
       this.cleanupInactiveRooms();
     }, 30 * 60 * 1000).unref();
+  }
+
+  async getSessionSecret(): Promise<string> {
+    return this.sessionSecret;
   }
 
   async createRoom(gameState: GameState): Promise<string> {
