@@ -19,7 +19,7 @@ app.set("trust proxy", 1);
 
 // CORS configuration
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN || "http://localhost:5000",
+  origin: (process.env.CORS_ORIGIN || "http://localhost:5000").split(",").map(origin => origin.trim()),
   credentials: true,
   optionsSuccessStatus: 200
 };
@@ -69,16 +69,6 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 app.use("/api/", limiter);
-
-// WebSocket rate limiting (less strict)
-const wsLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 60, // 60 connection attempts per minute
-  message: "Too many connection attempts, please try again later.",
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use("/ws", wsLimiter);
 
 // Body parsing middleware
 app.use(express.json({ limit: "1kb" }));

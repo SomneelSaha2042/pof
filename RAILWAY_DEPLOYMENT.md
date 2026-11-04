@@ -30,6 +30,12 @@ DATABASE_URL=${{Postgres.DATABASE_URL}}
 ```
 
 After adding a custom domain, replace `CORS_ORIGIN` with the custom HTTPS origin. Do not leave `CORS_ORIGIN=*` for production.
+Comma-separated origins are supported. WebSocket upgrades check the same explicit
+origins; native CLI clients may omit Origin. The server limits messages to 16 KiB,
+pending messages to 8 per connection, connections to 1,000 total and 120 per
+network peer, and room creation to 30 per minute per peer across HTTP and WebSocket.
+The room cap is 500. Behind a proxy, peer limits apply to the proxy address;
+forwarded headers cannot bypass these limits. Keep the single-replica deployment.
 
 ## Fresh database setup
 

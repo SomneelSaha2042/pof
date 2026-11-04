@@ -31,6 +31,7 @@ import {
 } from "@shared/game-engine";
 import { joinOrReconnectPlayer } from "./room-join";
 import { expireRoomActions } from "./game-deadlines";
+import { requestLimit } from "./request-limit";
 
 interface ExtendedWebSocket extends WebSocket {
   playerId?: string;
@@ -40,6 +41,9 @@ interface ExtendedWebSocket extends WebSocket {
   disconnectTimer?: NodeJS.Timeout;
   messageCount?: number;
   messageWindowStart?: number;
+  clientAddress?: string;
+  pendingMessages?: number;
+  messageQueue?: Promise<void>;
 }
 
 interface SocketMessage {
@@ -172,12 +176,45 @@ export function redactGameStateForPlayer(
 
 export async function registerRoutes(app: Express, roomStorage: IStorage = storage): Promise<Server> {
   const httpServer = createServer(app);
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 });
   const roomConnections = new Map<string, Set<ExtendedWebSocket>>();
+  const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5000").split(",").map(origin => origin.trim());
+  if (allowedOrigins.includes("*")) throw new Error("CORS_ORIGIN must list explicit allowed origins");
+  const allowConnection = requestLimit(120, 60_000);
+  const allowRoomCreation = requestLimit(30, 60_000);
+  let creatingRooms = 0;
+
+  async function createRoom(state: GameState, address: string): Promise<void> {
+    if (!allowRoomCreation(address)) throw Object.assign(new Error("Room creation rate limit exceeded"), { code: "ROOM_LIMIT" });
+    creatingRooms++;
+    try {
+      if ((await roomStorage.listActiveRooms()).length + creatingRooms > 500) throw Object.assign(new Error("Server room capacity reached"), { code: "ROOM_LIMIT" });
+      await roomStorage.createRoom(state);
+    } finally {
+      creatingRooms--;
+    }
+  }
 
   httpServer.on("upgrade", (request, socket, head) => {
-    const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+    let pathname: string;
+    try {
+      pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+    } catch {
+      socket.destroy();
+      return;
+    }
     if (pathname !== "/ws") {
+      socket.destroy();
+      return;
+    }
+    if (request.headers.origin && !allowedOrigins.includes(request.headers.origin)) {
+      socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+      return;
+    }
+    const address = request.socket.remoteAddress || "unknown";
+    const peerConnections = Array.from(wss.clients).filter(client => (client as ExtendedWebSocket).clientAddress === address).length;
+    if (!allowConnection(address) || peerConnections >= 120 || wss.clients.size >= 1000) {
+      socket.end("HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n");
       return;
     }
 
@@ -205,22 +242,17 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
 
     for (const socket of Array.from(connections)) {
       if (socket !== excludeSocket && socket.readyState === WebSocket.OPEN) {
-        if (message.type === "state:update" && message.data) {
-          const serializedMessage = {
-            ...message,
-            data: redactGameStateForPlayer(message.data, socket.playerId || ""),
-          };
-          socket.send(JSON.stringify(serializedMessage));
-        } else {
-          socket.send(JSON.stringify(message));
-        }
-        metrics.incrementMessagesSent();
+        sendToSocket(socket, message);
       }
     }
   }
 
   function sendToSocket(socket: ExtendedWebSocket, message: any): void {
     if (socket.readyState === WebSocket.OPEN) {
+      if (socket.bufferedAmount > 256 * 1024) {
+        socket.terminate();
+        return;
+      }
       let serializedMessage = message;
       if (message.type === "state:update" && message.data) {
         serializedMessage = {
@@ -319,7 +351,8 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
     }
   }
 
-  wss.on("connection", (socket: ExtendedWebSocket) => {
+  wss.on("connection", (socket: ExtendedWebSocket, request) => {
+    socket.clientAddress = request.socket.remoteAddress || "unknown";
     updateActiveSocketMetric();
     socket.lastPing = Date.now();
 
@@ -328,7 +361,8 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
       cancelDisconnect(socket);
     });
 
-    socket.on("message", async (data) => {
+    async function handleMessage(data: WebSocket.RawData) {
+      if (socket.readyState !== WebSocket.OPEN) return;
       const now = Date.now();
       if (now - (socket.messageWindowStart || 0) > 1000) {
         socket.messageCount = 0;
@@ -336,7 +370,7 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
       }
       socket.messageCount = (socket.messageCount || 0) + 1;
       if (socket.messageCount > 50) {
-        sendError(socket, "RATE_LIMIT_EXCEEDED", "Too many messages");
+        socket.close(1008, "Too many messages");
         return;
       }
 
@@ -384,7 +418,7 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
               undefined,
               parsed.ante ?? 10,
             );
-            await roomStorage.createRoom(gameState);
+            await createRoom(gameState, socket.clientAddress!);
             metrics.incrementRoomsCreated();
 
             socket.playerId = playerId;
@@ -779,9 +813,24 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
             sendError(socket, "UNKNOWN_MESSAGE", `Unknown message type: ${message.type}`);
         }
       } catch (error) {
+        if ((error as { code?: string }).code === "ROOM_LIMIT") {
+          sendError(socket, "ROOM_LIMIT", (error as Error).message);
+          return;
+        }
         console.error("Error handling message:", error);
         sendError(socket, "PARSE_ERROR", "Invalid message format");
       }
+    }
+    socket.on("message", (data, isBinary) => {
+      if (isBinary || (socket.pendingMessages || 0) >= 8) {
+        socket.close(1008, "Too many pending messages or invalid frame");
+        return;
+      }
+      socket.pendingMessages = (socket.pendingMessages || 0) + 1;
+      socket.messageQueue = (socket.messageQueue ?? Promise.resolve())
+        .then(() => handleMessage(data))
+        .catch(error => console.error("Socket action failed:", error))
+        .finally(() => { socket.pendingMessages!--; });
     });
 
     socket.on("close", async () => {
@@ -799,6 +848,7 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
     });
 
     socket.on("error", (error) => {
+      if ((error as { code?: string }).code === "WS_ERR_UNSUPPORTED_MESSAGE_LENGTH") return;
       console.error("WebSocket error:", error);
     });
   });
@@ -806,17 +856,14 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
   const heartbeat = setInterval(() => {
     updateActiveSocketMetric();
 
-    roomConnections.forEach((connections) => {
-      connections.forEach((socket) => {
+    wss.clients.forEach((client) => {
+        const socket = client as ExtendedWebSocket;
         if (socket.readyState === WebSocket.OPEN) {
           socket.ping();
 
           const timeSinceLastPing = Date.now() - (socket.lastPing || 0);
-          if (timeSinceLastPing > 30000) {
-            scheduleDisconnect(socket);
-          }
+          if (timeSinceLastPing > 30000) socket.terminate();
         }
-      });
     });
   }, 10000);
   let expiring = false;
@@ -850,7 +897,7 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
         undefined,
         parsed.ante ?? 10,
       );
-      await roomStorage.createRoom(gameState);
+      await createRoom(gameState, req.socket.remoteAddress || "unknown");
       metrics.incrementRoomsCreated();
 
       res.json({
@@ -860,7 +907,7 @@ export async function registerRoutes(app: Express, roomStorage: IStorage = stora
         gameState: redactGameStateForPlayer(gameState, playerId),
       });
     } catch (error) {
-      res.status(400).json({
+      res.status((error as { code?: string }).code === "ROOM_LIMIT" ? 429 : 400).json({
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
       });

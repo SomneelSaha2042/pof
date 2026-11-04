@@ -65,6 +65,34 @@ test("network handlers reject seat theft, non-host stakes, and stale consent", a
   assert.equal((await request(owner, "game:start", { roundNumber: 1 }, "error")).code, "START_FAILED");
 });
 
+test("WebSocket upgrades reject foreign origins and oversized messages", async t => {
+  const env = await table(t);
+  await assert.rejects(env.connect("https://untrusted.invalid"), /403/);
+  const ws = await env.connect("http://localhost:5000");
+  assert.deepEqual(await request(ws, "ping", {}, "pong"), {});
+  const closed = once(ws, "close");
+  ws.send(JSON.stringify({ type: "ping", data: { padding: "x".repeat(17 * 1024) } }));
+  assert.equal((await closed)[0], 1009);
+});
+
+test("room creation quotas are shared by HTTP and fresh WebSocket connections", async t => {
+  const env = await table(t);
+  for (let i = 0; i < 30; i++) {
+    const result = await fetch(`${env.http}/api/rooms`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playerName: `Alice ${i}` }) });
+    assert.equal(result.status, 200);
+  }
+  const ws = await env.connect();
+  const denied = await request(ws, "room:create", { playerName: "Bob" }, "error");
+  assert.equal(denied.code, "ROOM_LIMIT");
+  assert.equal((await env.rooms.listActiveRooms()).length, 30);
+});
+
+test("WebSocket connection quotas cannot be reset by opening a new connection", async t => {
+  const env = await table(t);
+  for (let i = 0; i < 120; i++) await env.connect();
+  await assert.rejects(env.connect(), /429/);
+});
+
 test("HTTP viewers cannot use a public bot ID to see private cards", async t => {
   const rooms = new MemStorage();
   const state = startRound(togglePlayerReady(addBotPlayer(createGame("POF-BOT", "Alice", "alice")), "alice"));
