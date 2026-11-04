@@ -415,21 +415,17 @@ export function evaluateSideArrangement(
 
   const fourCards = [...highBoard, ...lowBoard];
 
-  // 1. Check Quads (7x): both boards are pairs of the exact same rank
-  if (
-    highEval.kind === "pair" &&
-    lowEval.kind === "pair" &&
-    highEval.pairRank !== undefined &&
-    highEval.pairRank === lowEval.pairRank
-  ) {
-    const qRank = highEval.pairRank;
+  // Resolve wildcards across all four cards before optimizing each board separately.
+  const naturals = fourCards.filter(c => c.r !== 3);
+  if (naturals.every(c => c.r === naturals[0].r)) {
+    const qRank = pokerRank(naturals[0]?.r ?? 1);
     return {
       arrangement: normalizedArrangement,
       tier: "quads",
       multiplier: 7,
       quadRank: qRank,
-      highEval,
-      lowEval,
+      highEval: { ...highEval, kind: "pair", score: 100 + qRank, pairRank: qRank, label: `Pair of ${rankPluralLabel(qRank)}` },
+      lowEval: { ...lowEval, kind: "pair", score: 100 + qRank, pairRank: qRank, label: `Pair of ${rankPluralLabel(qRank)}` },
       tierLabel: `Quads ${rankPluralLabel(qRank)} (7x)`,
     };
   }

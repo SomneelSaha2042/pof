@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createGame, joinGame, togglePlayerReady, startRound, applyFlopDecision, addBotPlayer } from "../shared/game-engine";
+import { createGame, joinGame, togglePlayerReady, startRound, applyFlopDecision, addBotPlayer, computeBestSideArrangement, evaluateSideArrangement, compareSideHands1v1 } from "../shared/game-engine";
 import { redactGameStateForPlayer } from "./routes";
 
 function readyGame() {
@@ -18,6 +18,20 @@ test("an active hand cannot be redealt or lose outstanding contributions", () =>
   const sideGame = applyFlopDecision(applyFlopDecision(startRound(readyGame()), "alice", "fold"), "bob", "fold");
   assert.equal(sideGame.phase, "side_game");
   assert.throws(() => startRound(sideGame), /unfinished hand/);
+});
+
+test("three wild threes complete Quads and receive the 7x payout", () => {
+  const quads = computeBestSideArrangement([{ r: 9, s: "S" }, { r: 3, s: "S" }, { r: 3, s: "H" }, { r: 3, s: "D" }, { r: 4, s: "C" }]);
+  assert.equal(quads.tier, "quads");
+  assert.equal(quads.quadRank, 9);
+  assert.equal(quads.highEval.pairRank, 9);
+  assert.equal(quads.lowEval.pairRank, 9);
+  const opponent = computeBestSideArrangement([{ r: 10, s: "C" }, { r: 11, s: "C" }, { r: 12, s: "C" }, { r: 13, s: "C" }, { r: 2, s: "C" }]);
+  const result = compareSideHands1v1({ id: "a", name: "Alice", eval: quads }, { id: "b", name: "Bob", eval: opponent }, 10);
+  assert.equal(result.winnerId, "a");
+  assert.equal(result.chipAmount, 70);
+  const allWild = evaluateSideArrangement({ highBoard: [{ r: 3, s: "S" }, { r: 3, s: "H" }], lowBoard: [{ r: 3, s: "D" }, { r: 3, s: "C" }], unusedCard: { r: 2, s: "S" } });
+  assert.equal(allWild.quadRank, 14);
 });
 
 test("a public bot ID never grants a private player view", () => {
