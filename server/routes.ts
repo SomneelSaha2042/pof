@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
 import { metrics } from "./metrics";
 import { storage } from "./storage";
+import type { IStorage } from "./storage";
 import type { GameState, Settlement } from "@shared/game-types";
 import {
   JoinRoomSchema,
@@ -60,6 +61,7 @@ export function redactGameStateForPlayer(
   state: GameState,
   viewerPlayerId: string,
 ): GameState {
+  viewerPlayerId = state.players.find(p => p.id === viewerPlayerId && !p.isBot)?.id ?? "";
   const idMap = new Map<string, string>();
   state.players.forEach((p, idx) => {
     if (p.id === viewerPlayerId || p.isBot) {
@@ -163,7 +165,7 @@ export function redactGameStateForPlayer(
   };
 }
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(app: Express, roomStorage: IStorage = storage): Promise<Server> {
   const httpServer = createServer(app);
   const wss = new WebSocketServer({ noServer: true });
   const roomConnections = new Map<string, Set<ExtendedWebSocket>>();
@@ -246,7 +248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     connected: boolean,
   ): Promise<GameState | undefined> {
     try {
-      const updatedState = await storage.mutateRoom(roomCode, async (gameState) => {
+      const updatedState = await roomStorage.mutateRoom(roomCode, async (gameState) => {
         const playerIndex = gameState.players.findIndex((player) => player.id === playerId);
         if (playerIndex === -1) {
           return gameState;
@@ -349,7 +351,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               undefined,
               parsed.ante ?? 10,
             );
-            await storage.createRoom(gameState);
+            await roomStorage.createRoom(gameState);
             metrics.incrementRoomsCreated();
 
             socket.playerId = playerId;
@@ -376,7 +378,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             try {
               let playerId = newPlayerId;
-              const updatedState = await storage.mutateRoom(parsed.roomCode, async (gameState) => {
+              const updatedState = await roomStorage.mutateRoom(parsed.roomCode, async (gameState) => {
                 const result = joinOrReconnectPlayer(
                   gameState,
                   parsed.playerName,
@@ -419,7 +421,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               break;
             }
 
-            const gameState = await storage.getRoom(rawCode);
+            const gameState = await roomStorage.getRoom(rawCode);
             if (!gameState) {
               sendError(socket, "ROOM_NOT_FOUND", "Room not found");
               break;
@@ -451,7 +453,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const parsed = SetAnteSchema.parse(message.data);
 
             try {
-              const updatedState = await storage.mutateRoom(socket.roomCode, async (gameState) => {
+              const updatedState = await roomStorage.mutateRoom(socket.roomCode, async (gameState) => {
                 const isSeated = gameState.players.some(
                   (p) => p.id === socket.playerId && !p.isBot,
                 );
@@ -481,7 +483,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               break;
             }
             try {
-              const updatedState = await storage.mutateRoom(socket.roomCode, async (gameState) => {
+              const updatedState = await roomStorage.mutateRoom(socket.roomCode, async (gameState) => {
                 const isSeated = gameState.players.some(
                   (p) => p.id === socket.playerId && !p.isBot,
                 );
@@ -512,7 +514,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               break;
             }
             try {
-              const updatedState = await storage.mutateRoom(socket.roomCode, async (gameState) => {
+              const updatedState = await roomStorage.mutateRoom(socket.roomCode, async (gameState) => {
                 const isSeated = gameState.players.some(
                   (p) => p.id === socket.playerId && !p.isBot,
                 );
@@ -539,7 +541,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
 
             try {
-              const updatedState = await storage.mutateRoom(socket.roomCode, async (gameState) => {
+              const updatedState = await roomStorage.mutateRoom(socket.roomCode, async (gameState) => {
                 const next = togglePlayerReady(gameState, socket.playerId!);
                 if (process.env.NODE_ENV !== "production") {
                   checkInvariants(next);
@@ -570,7 +572,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
 
             try {
-              const updatedState = await storage.mutateRoom(socket.roomCode, async (gameState) => {
+              const updatedState = await roomStorage.mutateRoom(socket.roomCode, async (gameState) => {
                 const isSeated = gameState.players.some(
                   (p) => p.id === socket.playerId && !p.isBot,
                 );
@@ -605,7 +607,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             let actorName = "Player";
 
             try {
-              const updatedState = await storage.mutateRoom(socket.roomCode, async (gameState) => {
+              const updatedState = await roomStorage.mutateRoom(socket.roomCode, async (gameState) => {
                 const actor = gameState.players.find((p) => p.id === socket.playerId);
                 actorName = actor?.name || "Player";
                 const next = applyFlopDecision(gameState, socket.playerId!, parsed.decision);
@@ -642,7 +644,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const parsed = SubmitSideHandSchema.parse(message.data || {});
 
             try {
-              const updatedState = await storage.mutateRoom(socket.roomCode, async (gameState) => {
+              const updatedState = await roomStorage.mutateRoom(socket.roomCode, async (gameState) => {
                 const next = submitSideHand(
                   gameState,
                   socket.playerId!,
@@ -672,7 +674,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
 
             try {
-              const updatedState = await storage.mutateRoom(socket.roomCode, async (gameState) => {
+              const updatedState = await roomStorage.mutateRoom(socket.roomCode, async (gameState) => {
                 const isSeated = gameState.players.some(
                   (p) => p.id === socket.playerId && !p.isBot,
                 );
@@ -708,7 +710,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               break;
             }
 
-            let gameState = await storage.getRoom(roomCode);
+            let gameState = await roomStorage.getRoom(roomCode);
             if (!gameState) {
               sendError(socket, "ROOM_NOT_FOUND", "Room not found");
               break;
@@ -771,7 +773,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  setInterval(() => {
+  const heartbeat = setInterval(() => {
     updateActiveSocketMetric();
 
     roomConnections.forEach((connections) => {
@@ -787,6 +789,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     });
   }, 10000);
+  httpServer.on("close", () => {
+    clearInterval(heartbeat);
+    wss.close();
+  });
 
   app.post("/api/rooms", async (req, res) => {
     try {
@@ -801,7 +807,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         undefined,
         parsed.ante ?? 10,
       );
-      await storage.createRoom(gameState);
+      await roomStorage.createRoom(gameState);
       metrics.incrementRoomsCreated();
 
       res.json({
@@ -825,7 +831,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const newPlayerId = `player_${randomUUID()}`;
 
       let playerId = newPlayerId;
-      const updatedState = await storage.mutateRoom(roomCode, async (gameState) => {
+      const updatedState = await roomStorage.mutateRoom(roomCode, async (gameState) => {
         const result = joinOrReconnectPlayer(
           gameState,
           parsed.playerName,
@@ -862,7 +868,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { roomCode } = req.params;
       const { playerId } = req.query;
-      const gameState = await storage.getRoom(roomCode);
+      const gameState = await roomStorage.getRoom(roomCode);
 
       if (!gameState) {
         return res.status(404).json({
@@ -873,7 +879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         success: true,
-        gameState: redactGameStateForPlayer(gameState, (playerId as string) || ""),
+        gameState: redactGameStateForPlayer(gameState, typeof playerId === "string" ? playerId : ""),
       });
     } catch (error) {
       res.status(500).json({
